@@ -21,6 +21,22 @@ test('Collector resumes partial JSONL lines, reads only appended data, and reset
   await fs.writeFile(file,JSON.stringify(meta)+'\n');session=await collector.readFile(file,'codex');assert.equal(session.records.size,0);
 });
 
+test('Quota readings found in Codex logs are handed over once each', async t => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'agent-hud-test-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  const file=path.join(root,'session.jsonl');
+  const collector=new Collector({codexHome:root,claudeHome:root,dataDir:root});
+  const reset=Math.floor(Date.now()/1000)+3600;
+  const event=used=>JSON.stringify({type:'event_msg',timestamp:new Date().toISOString(),payload:{type:'token_count',rate_limits:{primary:{used_percent:used,window_minutes:300,resets_at:reset}}}});
+  await fs.writeFile(file,JSON.stringify({type:'session_meta',payload:{id:'q'}})+'\n'+event(20)+'\n');
+  await collector.readFile(file,'codex');
+  assert.deepEqual(collector.takeReadings().map(r=>[r.provider,r.limits.windows[0].remainingPercent]),[['codex',80]]);
+  assert.deepEqual(collector.takeReadings(),[]);
+  await fs.appendFile(file,event(35)+'\n');
+  await collector.readFile(file,'codex');
+  assert.deepEqual(collector.takeReadings().map(r=>r.limits.windows[0].remainingPercent),[65]);
+});
+
 test('Cross-file copied Claude responses count only once and content is excluded from snapshots', async t => {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'agent-hud-test-'));
   t.after(()=>fs.rm(root,{recursive:true,force:true}));

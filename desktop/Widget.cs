@@ -556,6 +556,7 @@ namespace AgentHud
                     : scanStale ? Lang.T("会话扫描延迟，额度不受影响", "Session scan delayed; quotas are unaffected")
                     : Lang.T("每 5 秒读取本地快照；平台额度按各自频率更新", "Reads the local snapshot every 5 s; each platform's quota updates on its own schedule"))
                 + (switchable ? Lang.T("\n外圈 5 小时、内圈 7 天；点击圆环切换中间显示哪一个", "\nOuter ring 5-hour, inner ring 7-day; click a ring to switch which one the middle shows") : "")
+                + (codex.OuterTick.HasValue || claude.OuterTick.HasValue ? Lang.T("\n圆环上的刻度：均匀使用时此刻应剩的位置", "\nThe tick on a ring: where even use would leave it now") : "")
                 + Lang.T("\n悬停宠物或圆环查看该 agent 的详情", "\nHover a pet or ring for that agent's details");
             if (!Equals(capsule.ToolTip, detail)) capsule.ToolTip = detail;
         }

@@ -106,6 +106,7 @@ namespace AgentHud.Tests
             var lapsedRings = RingValue.Rings(lapsed, now, true);
             Check(!lapsedRings.Center.Percent.HasValue && lapsedRings.Center.Status == RingStatus.Expired && lapsedRings.Lowest.Percent == 65, "a 5-hour snapshot past its reset shows its status in the middle while the 7 days still count as closer");
             CheckWeeklyLimit(now);
+            CheckPace(now);
 
             // Pets: an empty window beats work, work beats a low quota, and offline beats everything.
             var busy = ProviderAt(now); busy.activity = new Activity { working = true, activeSessions = 2, todayTokens = 1234567, todayRequests = 42, model = "gpt-6.1-sol", effort = "xhigh", lastActiveAt = now - 30000 };
@@ -231,6 +232,37 @@ namespace AgentHud.Tests
             Check(!RingValue.Rings(provider, now, true).Outer.ResetsAt.HasValue, "an unknown weekly reset does not promise availability at the 5-hour reset");
             Lang.Apply("en");
             try { Check(RingValue.Rings(provider, now, true).Outer.Detail.Contains("Weekly quota exhausted"), "the weekly restriction explanation is translated into English"); }
+            finally { Lang.Apply("zh"); }
+        }
+        // Same cases as test/pace.test.mjs, so the widget and the dashboard forecast alike.
+        static void CheckPace(double now)
+        {
+            const double hour = 3600000, day = 24 * hour;
+            Func<double?, double, double, QuotaWindow> win = (remaining, resetIn, minutes) => new QuotaWindow { windowMinutes = minutes, remainingPercent = remaining, resetsAt = now + resetIn };
+            var none = new Limits { windows = new List<QuotaWindow>() };
+            var steady = Pace.Of(win(62, 2.6 * hour, 300), none, now);
+            Check(Math.Abs(steady.Expected - 52) < 1e-9 && steady.State == Pace.Lasts && Math.Round(steady.LeftAtReset.Value) == 21 && !steady.RunsOutAt.HasValue, "even use would leave 52% now, and the pace so far leaves about 21% at the reset");
+            var fast = Pace.Of(win(24, 2 * hour, 300), none, now);
+            Check(fast.State == Pace.RunsOut && Math.Abs(fast.RunsOutAt.Value - (now + 24 / (76 / (3 * hour)))) <= 1, "at a fast pace the window runs out before its reset, at the time the dashboard's rule gives");
+            Check(Pace.Of(win(97, 5 * hour - 5 * 60000, 300), none, now).State == Pace.Early && Pace.Of(win(80, 5 * hour - 25 * 60000, 300), none, now).State == Pace.Early && Pace.Of(win(80, 5 * hour - 35 * 60000, 300), none, now).State == Pace.RunsOut
+                && Pace.Of(win(70, 7 * day - 13 * hour, 10080), none, now).State == Pace.Early && Pace.Of(win(0, hour, 300), none, now).State == Pace.Empty && Pace.Of(win(100, hour, 300), none, now).LeftAtReset == 100, "no forecast in the first tenth of a window or once used up; an untouched window lasts in full");
+            var blocked = new Limits { windows = new List<QuotaWindow> { win(80, hour, 300), win(0, day, 10080) } };
+            Check(Pace.Of(blocked.windows[0], blocked, now) == null && Pace.Of(win(50, -1, 300), none, now) == null && Pace.Of(win(null, hour, 300), none, now) == null && Pace.Of(new QuotaWindow { windowMinutes = 300, remainingPercent = 50 }, none, now) == null, "no pace while the week holds the 5 hours at zero, after the reset, or without a reading or reset time");
+            Check(fast.Describe(now + 2 * hour, now).StartsWith("按此节奏约 ") && fast.Describe(now + 2 * hour, now).EndsWith("用完，比重置早 1 小时 3 分钟") && steady.Describe(now + 2.6 * hour, now) == "按此节奏，重置时约剩 21%" && Pace.Of(win(97, 5 * hour - 5 * 60000, 300), none, now).Describe(now, now) == null, "the forecast reads as a time and its margin before the reset, or the share left at the reset");
+
+            var ring = new QuotaRing { Platform = "Claude Code" };
+            ring.Update(RingValue.Rings(ProviderAt(now), now, true), false);
+            Check(ring.OuterTick == 40 && ring.InnerTick == Math.Round(100.0 / 7 * 2) / 2, "each ring gets a tick where even use would leave it now");
+            var hurried = new Provider { id = "claude", limits = new Limits { collectedAt = now - 60000, staleAfterMs = 600000, source = "Claude 桌面账户额度", windows = new List<QuotaWindow> { win(24, 2 * hour, 300), win(73, 2.3 * day, 10080) } } };
+            var text = String.Join("\n", Texts(AgentDetail.Build(hurried, false, now, true, PetMood.Idle)));
+            Check(text.Contains("按此节奏约 ") && text.Contains("用完，比重置早 1 小时 3 分钟") && text.Contains("按此节奏，重置时约剩 "), "the card gives each window's forecast");
+            ring.Update(RingValue.Rings(hurried, now, true), false);
+            Check(System.Windows.Automation.AutomationProperties.GetName(ring).Contains("；5 小时：按此节奏约 "), "a window about to run out says so to screen readers");
+            var weekBlocked = ProviderAt(now); weekBlocked.limits.windows[1].remainingPercent = 0;
+            ring.Update(RingValue.Rings(weekBlocked, now, true), false);
+            Check(!ring.OuterTick.HasValue && ring.InnerTick.HasValue, "a 5-hour ring held at zero by the week has no tick of its own");
+            Lang.Apply("en");
+            try { Check(fast.Describe(now + 2 * hour, now).EndsWith(", 1 h 3 min before the reset") && steady.Describe(now + 2.6 * hour, now) == "At this pace, about 21% left at the reset", "the forecast speaks English too"); }
             finally { Lang.Apply("zh"); }
         }
         // The work area of the monitor a window is on, in physical pixels.

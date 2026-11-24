@@ -225,9 +225,9 @@ h1 { margin: 15px 0 0; font-size: clamp(32px, 6vw, 52px); font-weight: 700; lett
 .provider-state { display: flex; align-items: center; gap: 7px; margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
 .provider-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
 .provider-state i.live { background: var(--live); }
-.quota-windows { display: grid; grid-template-columns: 1fr 1fr; margin-top: 24px; }
+.quota-windows { display: grid; grid-template-columns: 1fr 1fr; row-gap: 24px; margin-top: 24px; }
 .quota-window { min-width: 0; padding-right: 20px; }
-.quota-window + .quota-window { padding: 0 0 0 20px; border-left: 1px solid var(--hairline); }
+.quota-window:nth-child(even) { padding: 0 0 0 20px; border-left: 1px solid var(--hairline); }
 .quota-label { display: flex; justify-content: space-between; align-items: baseline; color: var(--text-2); font-size: 13px; }
 .quota-label small { color: var(--text-3); font-size: 12px; }
 .quota-number { margin: 6px 0 14px; font-size: clamp(36px, 4.4vw, 46px); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-variant-numeric: tabular-nums; }
@@ -240,6 +240,34 @@ h1 { margin: 15px 0 0; font-size: clamp(32px, 6vw, 52px); font-weight: 700; lett
 .quota-bar.low span, .claude .quota-bar.low span { background: var(--danger); }
 .quota-reset { min-height: 20px; margin-top: 10px; overflow: hidden; color: var(--text-3); font-size: 12.5px; white-space: nowrap; text-overflow: ellipsis; }
 .quota-reason { margin-top: 5px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
+/* Pace: the tick marks what even use would leave by now, so a bar that stops short of it is running ahead of pace. */
+.quota-meter { position: relative; }
+.pace-tick { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--text); opacity: .45; pointer-events: none; }
+.quota-pace { margin-top: 2px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
+.quota-pace.warn { color: var(--danger); }
+/* Burndown: even use dashed, readings solid over a light fill, the pace so far dotted (red when it runs out first). */
+.burndown { margin-top: 12px; }
+.burndown svg { display: block; width: 100%; height: 52px; overflow: visible; }
+.burndown path, .burndown line { fill: none; vector-effect: non-scaling-stroke; }
+.bd-even { stroke: var(--text-4); stroke-width: 1; stroke-dasharray: 3 3; }
+.burndown .bd-fill { fill: var(--codex-tint); stroke: none; }
+.bd-lead { stroke: var(--codex); stroke-width: 1.4; stroke-dasharray: 2 3; opacity: .4; }
+.bd-actual { stroke: var(--codex); stroke-width: 1.8; stroke-linejoin: round; }
+.bd-proj { stroke: var(--codex); stroke-width: 1.8; stroke-dasharray: .5 4; stroke-linecap: round; }
+.claude .bd-lead, .claude .bd-actual, .claude .bd-proj { stroke: var(--claude); }
+.claude .burndown .bd-fill { fill: var(--claude-tint); }
+.burndown.warn .bd-proj { stroke: var(--danger); }
+.bd-now { stroke: var(--text-4); stroke-width: 1; opacity: .7; }
+.bd-axis { display: flex; justify-content: space-between; margin-top: 4px; color: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pace-note { margin: 12px 4px 0; color: var(--text-3); font-size: 12px; line-height: 1.5; }
+/* Model-specific windows (Claude's Opus week, Codex's per-model buckets): one compact row each. */
+.quota-extra { display: grid; gap: 12px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+.quota-row { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr) auto; align-items: center; column-gap: 14px; color: var(--text-2); font-size: 13px; }
+.quota-row-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.quota-row-value { min-width: 3.2em; color: var(--text); font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+.quota-row-note { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0 10px; margin-top: 3px; color: var(--text-3); font-size: 12px; }
+.quota-row-note .quota-pace { margin: 0; }
+.quota-extra + .provider-foot { margin-top: 22px; }
 .provider-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--hairline); color: var(--text-3); font-size: 12.5px; }
 .quota-windows + .provider-foot, .unavailable + .provider-foot { margin-top: 22px; }
 .provider-foot span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -493,7 +521,7 @@ dialog li { margin: 6px 0; }
   .table-footer, .page-footer { flex-direction: column; align-items: flex-start; gap: 4px; }
   .table-footer { padding-bottom: 12px; }
   .quota-window { padding-right: 14px; }
-  .quota-window + .quota-window { padding-left: 14px; }
+  .quota-window:nth-child(even) { padding-left: 14px; }
 }
 
 /* ---------- Accessibility signals ---------- */

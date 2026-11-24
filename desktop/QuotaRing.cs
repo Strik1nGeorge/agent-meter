@@ -36,6 +36,12 @@ namespace AgentHud
         public double? InnerPercent { get; private set; }
         // Whether the middle shows the inner ring's window.
         public bool CenterInner { get; private set; }
+        // Pace ticks: where even use would leave each ring right now, in half-percent steps so the slow
+        // drift redraws the ring only every minute or so. Null when there is no pace to show.
+        public double? OuterTick { get; private set; }
+        public double? InnerTick { get; private set; }
+        Pen tickPen;
+        Brush tickBrush;
         bool innerStale, centerStale;
         double? centerPercent;
         public string Platform { get; set; }
@@ -73,12 +79,15 @@ namespace AgentHud
             var center = set.Center ?? outerValue;
             var innerPercent = innerValue == null ? null : innerValue.Percent;
             var innerCenter = set.CenterInner && innerValue != null;
+            double? outerTick = Tick(outerValue), innerTick = innerValue == null ? null : Tick(innerValue);
             var changed = Percent != outerValue.Percent;
             var innerChanged = HasInner != (innerValue != null) || InnerPercent != innerPercent;
-            var styleChanged = Stale != outerValue.Stale || innerStale != (innerValue != null && innerValue.Stale) || centerStale != center.Stale || centerPercent != center.Percent || CenterInner != innerCenter;
+            var styleChanged = Stale != outerValue.Stale || innerStale != (innerValue != null && innerValue.Stale) || centerStale != center.Stale || centerPercent != center.Percent || CenterInner != innerCenter
+                || OuterTick != outerTick || InnerTick != innerTick;
             Percent = outerValue.Percent; Stale = outerValue.Stale;
             HasInner = innerValue != null; InnerPercent = innerPercent; innerStale = innerValue != null && innerValue.Stale;
             CenterInner = innerCenter; centerPercent = center.Percent; centerStale = center.Stale;
+            OuterTick = outerTick; InnerTick = innerTick;
             string primary, secondary;
             if (center.Percent.HasValue)
             {
@@ -102,10 +111,18 @@ namespace AgentHud
             // What the middle says, then each ring by name.
             var name = Platform + Lang.T(" 剩余额度 " + primary + (secondary != null ? "，" + secondary : ""), " quota remaining " + primary + (secondary != null ? ", " + secondary : ""));
             if (HasInner) name += Lang.T("；外圈 " + Describe(outerValue) + "，内圈 " + Describe(innerValue), "; outer ring " + Describe(outerValue) + ", inner ring " + Describe(innerValue));
+            // A window about to run out says so: the tick that shows it is visual only.
+            foreach (var value in new[] { outerValue, innerValue })
+                if (value != null && value.Pace != null && value.Pace.State == Pace.RunsOut && value.ResetsAt.HasValue)
+                    name += Lang.T("；" + value.Name + "：", "; " + value.Name + ": ") + value.Pace.Describe(value.ResetsAt.Value, RingValue.Now());
             if (AutomationProperties.GetName(this) != name) AutomationProperties.SetName(this, name);
             if (changed) Animate(DisplayProperty, Percent);
             if (innerChanged) Animate(DisplayInnerProperty, InnerPercent);
             if (changed || innerChanged || styleChanged || textChanged) InvalidateVisual();
+        }
+        static double? Tick(RingValue value)
+        {
+            return value.Pace == null ? (double?)null : Math.Round(value.Pace.Expected * 2) / 2;
         }
         static string Describe(RingValue value)
         {
@@ -133,6 +150,9 @@ namespace AgentHud
             // The ring whose number is in the middle is drawn at full strength, the other a step back.
             DrawRing(dc, outer, middle, OuterRadius, OuterThickness, Percent, Stale, Display, CenterInner ? 0.7 : 1);
             if (HasInner) DrawRing(dc, inner, middle, InnerRadius, InnerThickness, InnerPercent, innerStale, DisplayInner, CenterInner ? 1 : 0.7);
+            DrawTick(dc, middle, OuterRadius, OuterThickness, 0.9, OuterTick);
+            // The inner tick reaches only a little inward, clear of the number.
+            if (HasInner) DrawTick(dc, middle, InnerRadius, InnerThickness, 0.5, InnerTick);
 
             if (TextBrush == null || Primary == null) return;
             // Inside the inner ring everything is a size smaller, to stay clear of it.
@@ -166,6 +186,23 @@ namespace AgentHud
                 status.MaxTextWidth = room; status.MaxLineCount = 1; status.Trimming = TextTrimming.CharacterEllipsis;
                 dc.DrawText(status, new Point(half - Math.Min(status.Width, room) / 2, half - status.Height / 2));
             }
+        }
+
+        // A short radial mark across the stroke where even use would leave the ring now. An arc that stops
+        // short of it is running ahead of pace; one that reaches past it has quota to spare.
+        void DrawTick(DrawingContext dc, Point middle, double radius, double thickness, double inward, double? percent)
+        {
+            if (!percent.HasValue || TextBrush == null) return;
+            if (tickPen == null || tickBrush != TextBrush)
+            {
+                tickPen = new Pen(TextBrush, 1.3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+                if (tickPen.CanFreeze) tickPen.Freeze(); tickBrush = TextBrush;
+            }
+            var angle = percent.Value / 100 * 2 * Math.PI;
+            double sin = Math.Sin(angle), cos = Math.Cos(angle), from = radius - thickness / 2 - inward, to = radius + thickness / 2 + 0.9;
+            dc.PushOpacity(0.62);
+            dc.DrawLine(tickPen, new Point(middle.X + from * sin, middle.Y - from * cos), new Point(middle.X + to * sin, middle.Y - to * cos));
+            dc.Pop();
         }
 
         // Track all the way round (dotted while the value is unknown), the arc clockwise from 12 o'clock.

@@ -77,6 +77,52 @@ namespace AgentHud
         // The window closer to running out, which sets the pet's mood: a number beats a status word, then the lower number.
         public RingValue Lowest { get { return Inner != null && Inner.Percent.HasValue && (!Outer.Percent.HasValue || Inner.Percent.Value < Outer.Percent.Value) ? Inner : Outer; } }
     }
+    // How a quota window is being used, by the same rule as public/pace.js. Expected is the share that even
+    // use across the window would leave right now (the tick on rings and bars). The forecast extends the
+    // window's average rate so far: it either runs out before the reset (RunsOutAt) or lasts, with
+    // LeftAtReset still there when the window resets. Too early in a window, or once used up, no forecast.
+    public sealed class Pace
+    {
+        public const double MinElapsedMs = 10 * 60000, MinElapsedShare = 0.1;
+        public const string RunsOut = "runs-out", Lasts = "lasts", Early = "early", Empty = "empty";
+        public double Start, Expected;
+        public string State = Early;
+        public double? RunsOutAt, LeftAtReset;
+
+        public static Pace Of(QuotaWindow window, Limits limits, double now)
+        {
+            if (window == null || !window.resetsAt.HasValue || !window.windowMinutes.HasValue || window.windowMinutes.Value <= 0 || window.resetsAt.Value <= now) return null;
+            if (!window.remainingPercent.HasValue || Double.IsNaN(window.remainingPercent.Value) || Double.IsInfinity(window.remainingPercent.Value)) return null;
+            if (RingValue.WeeklyBlocker(limits, window, now) != null) return null;
+            double length = window.windowMinutes.Value * 60000, reset = window.resetsAt.Value;
+            var pace = new Pace { Start = reset - length, Expected = Math.Max(0, Math.Min(100, (reset - now) / length * 100)) };
+            var remaining = Math.Max(0, Math.Min(100, window.remainingPercent.Value));
+            double used = 100 - remaining, elapsed = Math.Max(0, now - pace.Start);
+            if (remaining <= 0) pace.State = Empty;
+            else if (used <= 0) { pace.State = Lasts; pace.LeftAtReset = remaining; }
+            else if (elapsed >= Math.Max(MinElapsedMs, length * MinElapsedShare))
+            {
+                double rate = used / elapsed, runsOutAt = now + remaining / rate;
+                if (runsOutAt < reset) { pace.State = RunsOut; pace.RunsOutAt = Math.Round(runsOutAt); }
+                else { pace.State = Lasts; pace.LeftAtReset = Math.Max(0, remaining - rate * (reset - now)); }
+            }
+            return pace;
+        }
+
+        // The forecast in words, or null when there is none to give.
+        public string Describe(double resetsAt, double now)
+        {
+            if (State == RunsOut && RunsOutAt.HasValue)
+                return Lang.T("按此节奏约 " + RingValue.ShortTime(RunsOutAt.Value, now) + " 用完，比重置早 " + RingValue.Span(resetsAt - RunsOutAt.Value),
+                    "At this pace it runs out around " + RingValue.ShortTime(RunsOutAt.Value, now) + ", " + RingValue.Span(resetsAt - RunsOutAt.Value) + " before the reset");
+            if (State == Lasts && LeftAtReset.HasValue)
+            {
+                var left = Math.Round(LeftAtReset.Value).ToString(CultureInfo.InvariantCulture);
+                return Lang.T("按此节奏，重置时约剩 " + left + "%", "At this pace, about " + left + "% left at the reset");
+            }
+            return null;
+        }
+    }
     public static class RingStatus
     {
         // Language-independent states; the label picks its words from these, never from Caption.
@@ -90,6 +136,8 @@ namespace AgentHud
         public string Status = RingStatus.Waiting;
         // The window's name ("5 小时" / "5 hours"), when there is one.
         public string Name;
+        // How the window is being used, while it is live and not held at zero by the week.
+        public Pace Pace;
         public string Caption;
         public string Detail;
         public static double Now() { return (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds; }
@@ -134,6 +182,7 @@ namespace AgentHud
             result.Status = RingStatus.Live;
             result.Percent = weekly == null ? Math.Max(0, Math.Min(100, win.remainingPercent.Value)) : 0;
             result.ResetsAt = EffectiveReset(win, weekly, now);
+            result.Pace = Pace.Of(win, limits, now);
             result.Stale = limits.stale || !online || !limits.collectedAt.HasValue || now - limits.collectedAt.Value > (limits.staleAfterMs ?? 120000);
             result.Caption = result.ResetsAt.HasValue ? ResetText(result.ResetsAt.Value - now) : Lang.T("重置时间未提供", "Reset time not provided");
             var resetDate = result.ResetsAt.HasValue ? LocalTime(result.ResetsAt.Value) : null;
@@ -241,6 +290,21 @@ namespace AgentHud
             // A weekday is only unambiguous within the next six days; a 7-day window's same-weekday reset gets its date.
             if ((reset.Value.Date - LocalTime(now).Value.Date).TotalDays < 7) { var day = (int)reset.Value.DayOfWeek; return Lang.T(WeekDaysZh[day], WeekDaysEn[day]); }
             return reset.Value.ToString("M/d", CultureInfo.InvariantCulture);
+        }
+        // A time later today as "15:40", on another day as "11-26 15:40".
+        public static string ShortTime(double time, double now)
+        {
+            var date = LocalTime(time); var today = LocalTime(now);
+            if (!date.HasValue || !today.HasValue) return "";
+            return date.Value.ToString(date.Value.Date == today.Value.Date ? "HH:mm" : "MM-dd HH:mm", CultureInfo.InvariantCulture);
+        }
+        // A stretch of time as "50 分钟" / "2 小时 10 分钟" / "1 天 3 小时".
+        public static string Span(double milliseconds)
+        {
+            var minutes = (long)Math.Round(Math.Max(0, milliseconds) / 60000);
+            if (minutes >= 1440) return Lang.T(String.Format("{0} 天 {1} 小时", minutes / 1440, (minutes % 1440) / 60), String.Format("{0} d {1} h", minutes / 1440, (minutes % 1440) / 60));
+            if (minutes >= 60) return Lang.T(String.Format("{0} 小时 {1} 分钟", minutes / 60, minutes % 60), String.Format("{0} h {1} min", minutes / 60, minutes % 60));
+            return Lang.T(minutes + " 分钟", minutes + " min");
         }
         public static string Stamp(double time)
         {

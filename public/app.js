@@ -1,5 +1,6 @@
 import { t, lang, setLang, server, rangeLabel, locale, applyStatic } from '/i18n.js';
 import { quotaDisplay } from '/quota-display.js';
+import { quotaPace } from '/pace.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -26,6 +27,38 @@ function sinceDay() { const today = calendarDay(Date.now()); return state.range 
 function ago(time) { if (!time) return t('time.none'); const seconds = Math.max(0, Math.floor((Date.now() - time)/1000)); if (seconds < 60) return t('time.justNow'); if (seconds < 3600) return t('time.min', { n: Math.floor(seconds/60) }); if (seconds < 86400) return t('time.hour', { n: Math.floor(seconds/3600) }); return t('time.day', { n: Math.floor(seconds/86400) }); }
 function fullTime(time) { return time ? new Intl.DateTimeFormat(locale(), { timeZone: state.data?.timeZone || 'America/New_York', dateStyle: 'short', timeStyle: 'short' }).format(time) : t('time.none'); }
 function countdown(time) { if (!time) return t('reset.none'); const mins = Math.ceil((time - Date.now())/60000); if (mins <= 0) return t('reset.passed'); if (mins >= 1440) return t('reset.days', { d: Math.floor(mins/1440), h: Math.floor(mins%1440/60) }); if (mins < 60) return t('reset.minutes', { m: mins }); return t('reset.hours', { h: Math.floor(mins/60), m: mins%60 }); }
+// Today's times as a clock time, other days with their date, in the dashboard's time zone.
+function shortTime(time) {
+  const sameDay = calendarDay(time) === calendarDay(Date.now());
+  return new Intl.DateTimeFormat(locale(), { timeZone: state.data?.timeZone || 'America/New_York', ...(sameDay ? {} : { month: '2-digit', day: '2-digit' }), hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(time);
+}
+function span(ms) { const mins = Math.round(Math.max(0, ms)/60000); if (mins >= 1440) return t('span.days', { d: Math.floor(mins/1440), h: Math.floor(mins%1440/60) }); if (mins >= 60) return t('span.hours', { h: Math.floor(mins/60), m: mins%60 }); return t('span.minutes', { m: mins }); }
+// The forecast under a window's reset time (public/pace.js has the rule; the widget's card says the same).
+function paceText(pace, resetsAt) {
+  if (pace?.state === 'runs-out') return `<div class="quota-pace warn">${t('pace.runsOut', { time: shortTime(pace.runsOutAt), gap: span(resetsAt - pace.runsOutAt) })}</div>`;
+  if (pace?.state === 'lasts') return `<div class="quota-pace">${t('pace.lasts', { n: Math.round(pace.leftAtReset) })}</div>`;
+  return '';
+}
+// The window from its start to its reset: even use as a dashed diagonal, the readings so far as solid steps
+// (a faint dashed lead-in from the full start up to the first reading, whose timing isn't known), and the
+// window's pace so far carried on from now as a dotted line, to empty or to the reset.
+function burndown(win, shown, pace, name) {
+  if (!pace) return '';
+  const width = 240, height = 52, now = Math.min(Date.now(), win.resetsAt), current = shown.remainingPercent;
+  const x = time => (Math.max(0, Math.min(1, (time - pace.start) / (win.resetsAt - pace.start))) * width).toFixed(2);
+  const y = value => ((1 - value / 100) * (height - 4) + 2).toFixed(2);
+  const readings = (win.history || []).filter(([time]) => time >= pace.start && time <= now);
+  let lead, actual = '', fill = '';
+  if (readings.length) {
+    lead = `M0,${y(100)} L${x(readings[0][0])},${y(readings[0][1])}`;
+    actual = `M${x(readings[0][0])},${y(readings[0][1])}${readings.slice(1).map(([time, value]) => ` H${x(time)} V${y(value)}`).join('')} H${x(now)} V${y(current)}`;
+    fill = `<path class="bd-fill" d="${actual} V${height} H${x(readings[0][0])} Z"/>`;
+  } else lead = `M0,${y(100)} L${x(now)},${y(current)}`;
+  const projection = pace.state === 'runs-out' ? `<path class="bd-proj" d="M${x(now)},${y(current)} L${x(pace.runsOutAt)},${y(0)}"/>`
+    : pace.state === 'lasts' ? `<path class="bd-proj" d="M${x(now)},${y(current)} L${width},${y(pace.leftAtReset)}"/>` : '';
+  const label = t('pace.chart', { name, start: shortTime(pace.start), reset: shortTime(win.resetsAt), n: Math.round(current) });
+  return `<div class="burndown${pace.state === 'runs-out' ? ' warn' : ''}"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(label)}"><title>${escapeHtml(label)}</title><path class="bd-even" d="M0,${y(100)} L${width},${y(0)}"/>${fill}<path class="bd-lead" d="${lead}"/>${actual ? `<path class="bd-actual" d="${actual}"/>` : ''}${projection}<line class="bd-now" x1="${x(now)}" y1="0" x2="${x(now)}" y2="${height}"/></svg><div class="bd-axis"><span>${shortTime(pace.start)}</span><span>${shortTime(win.resetsAt)}</span></div></div>`;
+}
 function usage(records) { return records.reduce((sum,r) => { for (const k of Object.keys(sum)) sum[k] += r[k] || 0; return sum; }, { input:0, output:0, cached:0, cacheWrite:0, reasoning:0, total:0 }); }
 function selectedSessions() {
   if (!state.data) return [];
@@ -34,6 +67,23 @@ function selectedSessions() {
     const records = s.records.filter(r => calendarDay(r.time) >= since);
     return { ...s, records, usage: usage(records) };
   }).filter(s => s.records.length || calendarDay(s.updatedAt || 0) >= since);
+}
+
+// The bar with its pace tick: what even use would leave by now, so a bar that stops short of it is ahead of pace.
+function quotaMeter(shown, pace, unavailable) {
+  const title = pace ? ` title="${escapeHtml(t('pace.tick', { n: Math.round(pace.expected) }))}"` : '';
+  return `<div class="quota-meter"${title}><div class="quota-bar ${shown.remainingPercent < 20 ? 'low' : ''}"><span style="width:${unavailable ? 0 : shown.remainingPercent}%"></span></div>${pace ? `<i class="pace-tick" style="left:${pace.expected.toFixed(2)}%"></i>` : ''}</div>`;
+}
+function quotaCell(win, windows) {
+  const shown = quotaDisplay(win, windows), pace = quotaPace(win, windows);
+  const unavailable = shown.expired || shown.remainingPercent == null;
+  const reported = Number.isFinite(win.remainingPercent) ? t('quota.reportedLeft', { n: Number(win.remainingPercent.toFixed(1)) }) : '';
+  return `<div class="quota-window"><div class="quota-label"><span>${escapeHtml(server(win.name))}</span><small>${shown.expired ? t('quota.updating') : t('quota.left')}</small></div><div class="quota-number">${unavailable ? '—' : Number(shown.remainingPercent.toFixed(1))}${unavailable ? '' : '<small>%</small>'}</div>${quotaMeter(shown, pace, unavailable)}<div class="quota-reset" title="${escapeHtml(fullTime(shown.resetsAt))}">${countdown(shown.resetsAt)}</div>${paceText(pace, win.resetsAt)}${shown.weeklyBlocked ? `<div class="quota-reason" title="${escapeHtml(reported)}">${t('quota.weeklyBlocked')}</div>` : ''}${burndown(win, shown, pace, server(win.name))}</div>`;
+}
+function quotaRow(win, windows) {
+  const shown = quotaDisplay(win, windows), pace = quotaPace(win, windows);
+  const unavailable = shown.expired || shown.remainingPercent == null;
+  return `<div class="quota-row"><span class="quota-row-name">${escapeHtml(server(win.name))}</span>${quotaMeter(shown, pace, unavailable)}<span class="quota-row-value">${unavailable ? '—' : `${Number(shown.remainingPercent.toFixed(1))}%`}</span><div class="quota-row-note"><span title="${escapeHtml(fullTime(shown.resetsAt))}">${countdown(shown.resetsAt)}</span>${paceText(pace, win.resetsAt).replace('<div class="quota-pace', '<span class="quota-pace').replace(/<\/div>$/, '</span>')}</div></div>`;
 }
 
 function renderProviders() {
@@ -45,12 +95,11 @@ function renderProviders() {
     const recent = limits && !limits.stale && Date.now() - limits.collectedAt < (limits.staleAfterMs || 120000);
     const plan = limits?.plan ? `<span class="plan">${escapeHtml(limits.plan)}</span>` : '';
     const label = windows.length ? (recent ? t('state.synced') : t('state.snapshot')) : (p.connected ? t('state.connected') : t('state.waiting'));
-    const body = windows.length ? `<div class="quota-windows">${windows.map(win => {
-      const shown = quotaDisplay(win, windows);
-      const unavailable = shown.expired || shown.remainingPercent == null;
-      const reported = Number.isFinite(win.remainingPercent) ? t('quota.reportedLeft', { n: Number(win.remainingPercent.toFixed(1)) }) : '';
-      return `<div class="quota-window"><div class="quota-label"><span>${escapeHtml(server(win.name))}</span><small>${shown.expired ? t('quota.updating') : t('quota.left')}</small></div><div class="quota-number">${unavailable ? '—' : Number(shown.remainingPercent.toFixed(1))}${unavailable ? '' : '<small>%</small>'}</div><div class="quota-bar ${shown.remainingPercent < 20 ? 'low' : ''}"><span style="width:${unavailable ? 0 : shown.remainingPercent}%"></span></div><div class="quota-reset" title="${escapeHtml(fullTime(shown.resetsAt))}">${countdown(shown.resetsAt)}</div>${shown.weeklyBlocked ? `<div class="quota-reason" title="${escapeHtml(reported)}">${t('quota.weeklyBlocked')}</div>` : ''}</div>`;
-    }).join('')}</div>` : `<div class="unavailable"><strong>${t('quota.unavailable')}</strong><p>${escapeHtml(id === 'claude' ? server(p.quotaMessage) || t('quota.claudeMissing') : t('quota.codexMissing'))}</p>${id === 'claude' ? `<div class="button-row"><a class="connect-button" href="https://claude.ai/settings/usage" target="_blank" rel="noreferrer">${t('quota.claudeUsage')}</a><button class="connect-button secondary" data-setup>${t('quota.setupGuide')}</button></div>` : ''}</div>`;
+    // Account-wide windows get the full layout; model-specific ones (Claude's Opus week, Codex's per-model
+    // buckets) a compact row underneath, unless they are all the plan has.
+    const accountWide = windows.filter(w => (!w.id || w.id === 'five_hour' || w.id === 'seven_day') && !String(w.name || '').includes('·'));
+    const main = accountWide.length ? accountWide : windows, extra = accountWide.length ? windows.filter(w => !accountWide.includes(w)) : [];
+    const body = windows.length ? `<div class="quota-windows">${main.map(win => quotaCell(win, windows)).join('')}</div>${extra.length ? `<div class="quota-extra">${extra.map(win => quotaRow(win, windows)).join('')}</div>` : ''}` : `<div class="unavailable"><strong>${t('quota.unavailable')}</strong><p>${escapeHtml(id === 'claude' ? server(p.quotaMessage) || t('quota.claudeMissing') : t('quota.codexMissing'))}</p>${id === 'claude' ? `<div class="button-row"><a class="connect-button" href="https://claude.ai/settings/usage" target="_blank" rel="noreferrer">${t('quota.claudeUsage')}</a><button class="connect-button secondary" data-setup>${t('quota.setupGuide')}</button></div>` : ''}</div>`;
     return `<article class="provider-card ${id}"><div class="provider-top"><span class="provider-logo ${id}" aria-hidden="true">${LOGOS[id]}</span><span class="provider-name">${p.name}</span>${plan}<span class="provider-state"><i class="${recent ? 'live' : ''}"></i>${label}</span></div>${body}<div class="provider-foot"><span title="${escapeHtml(server(p.quotaError) || '')}">${limits ? `${escapeHtml(server(limits.source))} · ${ago(limits.collectedAt)}` : t('quota.separate')}</span><div class="foot-links"><a class="source-link" href="${USAGE_PAGES[id]}" target="_blank" rel="noreferrer">${t('quota.usagePage')}</a><button class="source-link" data-connections>${t('quota.sources')}</button></div></div></article>`;
   }).join('');
   $$('[data-setup]').forEach(b => b.addEventListener('click', openSetup));

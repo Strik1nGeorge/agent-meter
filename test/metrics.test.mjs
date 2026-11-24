@@ -57,6 +57,15 @@ test('Quota windows are named by their length, including the free plan\'s 30-day
   assert.deepEqual([300,10080,90,45].map(windowLabel),['5 小时','7 天','90 分钟','45 分钟']);
   assert.equal(windowLabel(120),'2 小时');
 });
+test('Codex quota snapshots in the logs become history readings when they change, for the last eight days only', () => {
+  const s=newSession('codex','file');consumeCodex(s,{type:'session_meta',payload:{id:'s'}});
+  const reset=Math.floor(Date.now()/1000)+3600;
+  const event=(minutesAgo,used)=>({type:'event_msg',timestamp:new Date(Date.now()-minutesAgo*60000).toISOString(),payload:{type:'token_count',rate_limits:{primary:{used_percent:used,window_minutes:300,resets_at:reset}}}});
+  for(const [ago,used] of [[30,10],[20,10],[10,25]])consumeCodex(s,event(ago,used));
+  assert.deepEqual(s.limitReadings.map(r=>r.windows[0].remainingPercent),[90,75]);
+  const old=newSession('codex','file');consumeCodex(old,event(9*24*60,5));
+  assert.equal(old.limitReadings.length,0);assert.equal(old.latestLimits.windows[0].remainingPercent,95);
+});
 test('All named Codex quota buckets are retained', () => {
   const result=codexLimits({rateLimits:{primary:{usedPercent:99}},rateLimitsByLimitId:{codex:{primary:{usedPercent:20,windowDurationMins:300}},special:{limitName:'Special',secondary:{usedPercent:50,windowDurationMins:10080}}}},1,'api');
   assert.equal(result.windows.length,2);assert.equal(result.windows[0].remainingPercent,80);assert.match(result.windows[1].name,/Special/);

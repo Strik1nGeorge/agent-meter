@@ -53,7 +53,7 @@ namespace AgentHud
                 {
                     var role = inner == null ? (window == outer && windows.Count > 1 ? Lang.T(" · 圆环显示", " · in the ring") : "")
                         : window == outer ? Lang.T(" · 外圈", " · outer ring") : window == inner ? Lang.T(" · 内圈", " · inner ring") : "";
-                    card.Children.Add(WindowRow(window, role, codex, now, RingValue.WeeklyBlocker(limits, window, now)));
+                    card.Children.Add(WindowRow(window, role, codex, now, RingValue.WeeklyBlocker(limits, window, now), Pace.Of(window, limits, now)));
                 }
                 if (inner != null)
                 {
@@ -101,7 +101,7 @@ namespace AgentHud
             return text;
         }
 
-        static UIElement WindowRow(QuotaWindow window, string role, bool codex, double now, QuotaWindow weekly)
+        static UIElement WindowRow(QuotaWindow window, string role, bool codex, double now, QuotaWindow weekly, Pace pace)
         {
             var row = new StackPanel { Margin = new Thickness(0, 0, 0, 7) };
             var top = new DockPanel { LastChildFill = true };
@@ -123,6 +123,17 @@ namespace AgentHud
             fill.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(expired ? 100 : 100 - percent, GridUnitType.Star) });
             fill.Children.Add(new Border { CornerRadius = new CornerRadius(2), Background = Brand(codex, false) });
             bar.Children.Add(fill);
+            // The pace tick, as on the ring: where even use would leave this window now.
+            if (pace != null && !expired)
+            {
+                var tick = new Grid { Margin = new Thickness(0, -2, 0, -2) };
+                tick.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(pace.Expected, GridUnitType.Star) });
+                tick.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100 - pace.Expected, GridUnitType.Star) });
+                var mark = new Border { Width = 1.5, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, -0.75, 0), CornerRadius = new CornerRadius(0.75), Opacity = 0.6 };
+                mark.SetResourceReference(Border.BackgroundProperty, "Text");
+                tick.Children.Add(mark);
+                bar.Children.Add(tick);
+            }
             row.Children.Add(bar);
 
             var reset = expired ? Lang.T("已过重置时间，等待更新", "Reset time passed; waiting for an update")
@@ -130,6 +141,14 @@ namespace AgentHud
                 : Lang.T("重置时间未提供", "Reset time not provided");
             row.Children.Add(Text(reset, 10.5, FontWeights.Normal, true));
             if (weekly != null) row.Children.Add(Text(RingValue.WeeklyBlockedText(window), 10.5, FontWeights.Normal, true));
+            // The forecast; running out before the reset is the one worth colouring.
+            var forecast = pace == null || expired ? null : pace.Describe(window.resetsAt.Value, now);
+            if (forecast != null)
+            {
+                var line = Text(forecast, 10.5, FontWeights.Normal, true);
+                if (pace.State == Pace.RunsOut) line.SetResourceReference(TextBlock.ForegroundProperty, "Low");
+                row.Children.Add(line);
+            }
             return row;
         }
 

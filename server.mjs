@@ -7,6 +7,7 @@ import { Collector } from './lib/collector.mjs';
 import { CodexQuota } from './lib/codex-rpc.mjs';
 import { ClaudeDesktopQuota } from './lib/claude-desktop.mjs';
 import { providerActivity } from './lib/activity.mjs';
+import { QuotaHistory } from './lib/quota-history.mjs';
 
 // Match desktop applications' Windows trust store without weakening HTTPS validation.
 if (process.platform === 'win32' && typeof tls.getCACertificates === 'function' && typeof tls.setDefaultCACertificates === 'function') {
@@ -22,7 +23,18 @@ const quota = new CodexQuota();
 const claudeDesktopEnabled = await fs.readFile(path.join(dataDir, 'claude-desktop-connection.json'), 'utf8').then(s => JSON.parse(s).enabled === true).catch(() => false);
 const claudeQuota = new ClaudeDesktopQuota();
 const port = Number(process.env.PORT || 4318);
-const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/i18n.js': ['i18n.js', 'text/javascript; charset=utf-8'], '/quota-display.js': ['quota-display.js', 'text/javascript; charset=utf-8'], '/styles.css': ['styles.css', 'text/css; charset=utf-8'], '/icon.svg': ['icon.svg','image/svg+xml'] };
+const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/i18n.js': ['i18n.js', 'text/javascript; charset=utf-8'], '/quota-display.js': ['quota-display.js', 'text/javascript; charset=utf-8'], '/pace.js': ['pace.js', 'text/javascript; charset=utf-8'], '/styles.css': ['styles.css', 'text/css; charset=utf-8'], '/icon.svg': ['icon.svg','image/svg+xml'] };
+// Quota readings over each window, for the dashboard's burndown: every live quota read, plus the
+// snapshot Codex writes into its logs with each request, so Codex history starts filled in.
+const history = new QuotaHistory(path.join(dataDir, 'quota-history.json')).load();
+function recordHistory() {
+  for (const { provider, limits } of collector.takeReadings()) history.record(provider, limits);
+  for (const p of collector.value.providers) if (p.limits) history.record(p.id, p.limits);
+  if (quota.snapshot) history.record('codex', quota.snapshot);
+  if (claudeDesktopEnabled && claudeQuota.snapshot) history.record('claude', claudeQuota.snapshot);
+  history.prune();
+  if (Date.now() - history.savedAt > 30000) history.save();
+}
 
 function snapshot() {
   const data = structuredClone(collector.value);
@@ -44,6 +56,7 @@ function snapshot() {
       claude.quotaMessage = '桌面版账户额度读取通道已准备好，尚未启用连接。';
     }
   }
+  for (const p of data.providers) if (p.limits?.windows) p.limits = { ...p.limits, windows: p.limits.windows.map(w => ({ ...w, history: history.points(p.id, w) })) };
   data.timeZone = 'America/New_York';
   data.refreshSeconds = 5;
   return data;
@@ -69,9 +82,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/quotas') {
       const data = snapshot();
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      // The widget gets each platform's live activity (for its pets and hover cards) instead of every session record.
+      // The widget gets each platform's live activity (for its pets and hover cards) instead of every session record,
+      // and no quota history: it draws no burndown.
       const now = Date.now();
-      const providers = data.providers.map(p => ({ ...p, activity: providerActivity(data.sessions, p.id, now, data.timeZone) }));
+      const providers = data.providers.map(p => ({ ...p, limits: p.limits && { ...p.limits, windows: p.limits.windows.map(({ history: points, ...w }) => w) }, activity: providerActivity(data.sessions, p.id, now, data.timeZone) }));
       res.end(JSON.stringify({ providers, collectedAt: data.collectedAt, loading: data.loading, timeZone: data.timeZone })); return;
     }
     if (url.pathname === '/api/health') {
@@ -95,6 +109,6 @@ const refresh = () => collector.refresh().catch(() => { collector.value.error = 
 void refresh();
 if (!process.env.AGENT_HUD_DISABLE_RPC) void quota.refresh();
 if (claudeDesktopEnabled) void claudeQuota.refresh();
-const timer = setInterval(() => { void refresh(); if (!process.env.AGENT_HUD_DISABLE_RPC) void quota.refresh(); if (claudeDesktopEnabled) void claudeQuota.refresh(); }, 5000);
-function close() { clearInterval(timer); quota.close(); claudeQuota.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 1500).unref(); }
+const timer = setInterval(() => { recordHistory(); void refresh(); if (!process.env.AGENT_HUD_DISABLE_RPC) void quota.refresh(); if (claudeDesktopEnabled) void claudeQuota.refresh(); }, 5000);
+function close() { clearInterval(timer); recordHistory(); history.save(); quota.close(); claudeQuota.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 1500).unref(); }
 process.on('SIGINT', close); process.on('SIGTERM', close);
