@@ -14,7 +14,10 @@ namespace AgentHud
     {
         public bool Light;
         public Color Text, TextMuted, Accent, Low;
-        public Brush Tint, Sheen, Rim, RimOffline, Edge;
+        // Acrylic built over the window's blur, back to front: Tint, a fine Grain, a top Sheen, the darker
+        // outer Edge, the specular Highlight just inside it, and the Rim that turns orange while the local
+        // service is offline.
+        public Brush Tint, Grain, Sheen, Highlight, Rim, RimOffline, Edge;
         // Platform colours for the rings: Codex's blue-violet gradient, Claude's clay.
         public Brush CodexArc, CodexLogo, ClaudeArc, ClaudeLogo;
         public Color CodexTrack, ClaudeTrack;
@@ -43,8 +46,47 @@ namespace AgentHud
             {
                 palette.Tint = Solid(light ? Colors.White : Colors.Black);
                 palette.Edge = Solid(palette.Text);
+                palette.Grain = palette.Sheen = palette.Highlight = Brushes.Transparent;
             }
             return palette;
+        }
+
+        // Acrylic's noise: a fixed tile of grey specks at a few percent opacity, so the glass reads as a
+        // material rather than a flat tint. Seeded, so every launch (and screenshot) looks the same.
+        static Brush Noise(byte alpha)
+        {
+            const int size = 128;
+            var pixels = new byte[size * size * 4];
+            var random = new Random(7);
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                var grey = (byte)random.Next(256);
+                pixels[i] = pixels[i + 1] = pixels[i + 2] = grey; pixels[i + 3] = alpha;
+            }
+            var tile = System.Windows.Media.Imaging.BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, pixels, size * 4);
+            tile.Freeze();
+            var brush = new ImageBrush(tile) { TileMode = TileMode.Tile, Stretch = Stretch.None, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, size, size), AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top };
+            brush.Freeze(); return brush;
+        }
+
+        // Specular light along the glass edge: bright across the top, fading within the first few DIP so the
+        // sides stay faint in both the strip and the tall column (absolute stops, padded past the last one).
+        static Brush EdgeLight(byte top, byte near, byte fade, byte rest)
+        {
+            var brush = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(0, 0), EndPoint = new Point(0, 60) };
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(top, 255, 255, 255), 0));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(near, 255, 255, 255), 8.0 / 60));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(fade, 255, 255, 255), 26.0 / 60));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(rest, 255, 255, 255), 1));
+            brush.Freeze(); return brush;
+        }
+        // A soft gloss across the top of the glass, gone by 30 DIP.
+        static Brush Gloss(byte top)
+        {
+            var brush = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(0, 0), EndPoint = new Point(0, 30) };
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(top, 255, 255, 255), 0));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 1));
+            brush.Freeze(); return brush;
         }
 
         static Brush Gradient(Point start, Point end)
@@ -62,11 +104,13 @@ namespace AgentHud
                 Text = Hex(0x1d1d1f), TextMuted = Hex(0x86868b),
                 // Low quota shows in system red: orange is Claude's own colour.
                 Accent = Hex(0x0071e3), Low = Hex(0xff3b30),
-                // Glass recipe: rgba(245,245,247,.72); solid when Windows transparency effects are off.
+                // Glass recipe: rgba(245,245,247,.72) with grain; solid and plain when Windows transparency effects are off.
                 Tint = Solid(Color.FromArgb((byte)(transparency ? 184 : 255), 245, 245, 247)),
-                Sheen = Brushes.Transparent, Rim = Brushes.Transparent,
-                RimOffline = Solid(Color.FromArgb(220, 255, 107, 0)),
-                Edge = Solid(Color.FromArgb(20, 0, 0, 0)),
+                Grain = transparency ? Noise(9) : Brushes.Transparent,
+                Sheen = Gloss(64), Highlight = EdgeLight(235, 110, 30, 22),
+                Rim = Brushes.Transparent, RimOffline = Solid(Color.FromArgb(220, 255, 107, 0)),
+                // A faint darker outline separates the glass from whatever is behind it.
+                Edge = Solid(Color.FromArgb(30, 0, 0, 0)),
             };
         }
 
@@ -78,23 +122,20 @@ namespace AgentHud
                 Text = Hex(0xf5f5f7), TextMuted = Hex(0x98989d),
                 Accent = Hex(0x0a84ff), Low = Hex(0xff453a),
                 Tint = Solid(Color.FromArgb((byte)(transparency ? 184 : 255), 28, 28, 30)),
-                Sheen = Brushes.Transparent, Rim = Brushes.Transparent,
-                RimOffline = Solid(Color.FromArgb(220, 255, 159, 10)),
-                Edge = Solid(Color.FromArgb(30, 255, 255, 255)),
+                Grain = transparency ? Noise(10) : Brushes.Transparent,
+                Sheen = Gloss(18), Highlight = EdgeLight(80, 40, 14, 10),
+                Rim = Brushes.Transparent, RimOffline = Solid(Color.FromArgb(220, 255, 159, 10)),
+                Edge = Solid(Color.FromArgb(96, 0, 0, 0)),
             };
         }
 
-        // Brushes the XAML styles (menus, tooltips, chips) look up dynamically.
+        // Brushes the XAML styles (menus, tooltips, icon buttons) look up dynamically.
         public void ApplyTo(ResourceDictionary resources)
         {
             resources["Text"] = Solid(Text);
             resources["TextMuted"] = Solid(TextMuted);
             resources["Accent"] = Solid(Accent);
             resources["Low"] = Solid(Low);
-            // Segmented "white pill": solid surface, hairline, no gradient.
-            resources["ChipBg"] = Solid(Light ? Colors.White : Color.FromArgb(36, 255, 255, 255));
-            resources["ChipHover"] = Solid(Light ? Hex(0xfbfbfd) : Color.FromArgb(52, 255, 255, 255));
-            resources["ChipRim"] = Solid(Light ? Color.FromArgb(20, 0, 0, 0) : Color.FromArgb(26, 255, 255, 255));
             resources["IconHover"] = Solid(Light ? Color.FromArgb(13, 0, 0, 0) : Color.FromArgb(20, 255, 255, 255));
             resources["MenuBg"] = Solid(Light ? Color.FromArgb(250, 251, 251, 253) : Color.FromArgb(250, 44, 44, 46));
             resources["MenuRim"] = Solid(Light ? Color.FromArgb(18, 0, 0, 0) : Color.FromArgb(26, 255, 255, 255));
@@ -156,24 +197,6 @@ namespace AgentHud
       </Border>
     </ControlTemplate></Setter.Value></Setter>
   </Style>
-  <Style x:Key='GlassChip' TargetType='Button'>
-    <Setter Property='OverridesDefaultStyle' Value='True'/>
-    <Setter Property='Foreground' Value='{DynamicResource Text}'/>
-    <Setter Property='Cursor' Value='Hand'/>
-    <Setter Property='Focusable' Value='False'/>
-    <Setter Property='RenderTransformOrigin' Value='.5,.5'/>
-    <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
-      <Grid Background='Transparent'>
-        <Border x:Name='Bd' Width='36' Height='26' CornerRadius='13' Background='{DynamicResource ChipBg}' BorderBrush='{DynamicResource ChipRim}' BorderThickness='1'>
-          <Border.Effect><DropShadowEffect BlurRadius='3' ShadowDepth='1' Direction='270' Opacity='.12' Color='Black'/></Border.Effect>
-        </Border>
-        <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center' Margin='0,0,0,1'/>
-      </Grid>
-      <ControlTemplate.Triggers>
-        <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Bd' Property='Background' Value='{DynamicResource ChipHover}'/></Trigger>
-      </ControlTemplate.Triggers>
-    </ControlTemplate></Setter.Value></Setter>
-  </Style>
   <Style x:Key='IconChip' TargetType='Button'>
     <Setter Property='OverridesDefaultStyle' Value='True'/>
     <Setter Property='Cursor' Value='Hand'/>
@@ -195,7 +218,9 @@ namespace AgentHud
 
     // Real blur of whatever is behind the strip. DWM blurs the whole window rectangle and ignores window
     // regions, so the only clean shape is the system's own rounded corner (8 DIP on Windows 11); the WPF
-    // glass layers use the same radius.
+    // glass layers use the same radius. Windows 11's own acrylic backdrop (DWMWA_SYSTEMBACKDROP_TYPE) is
+    // not used: DWM draws it only on the focused window, and the widget never takes focus, so it would sit
+    // opaque. The accent blur keeps working unfocused; Palette layers the acrylic look over it.
     public static class GlassWindow
     {
         public const double SystemCornerRadius = 8;

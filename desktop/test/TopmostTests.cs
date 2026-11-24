@@ -126,7 +126,7 @@ namespace AgentHud.Tests
                     Rect docked; place.TryGetRect(out docked);
                     Console.WriteLine("Docked rect " + docked + " in work area " + work + "; size " + hud.Width + "x" + hud.Height + ", edge " + place.SideEdge());
                     // Sizes snap to whole physical pixels, so compare within a pixel.
-                    Check(Math.Abs(hud.Width - 58) < 1 && Math.Abs(hud.Height - 290) < 1 && place.SideEdge() == "left" && docked.Left == work.Left && docked.Top >= work.Top && docked.Bottom <= work.Bottom, "against the left edge the strip becomes a column, flush with that edge");
+                    Check(Math.Abs(hud.Width - 58) < 1 && Math.Abs(hud.Height - 260) < 1 && place.SideEdge() == "left" && docked.Left == work.Left && docked.Top >= work.Top && docked.Bottom <= work.Bottom, "against the left edge the strip becomes a column, flush with that edge");
                     Click(hud, "MoreButton");
                     var sideMenu = Menu(hud);
                     var menuLeft = sideMenu.PointToScreen(new Point(14, 14)).X;
@@ -134,7 +134,7 @@ namespace AgentHud.Tests
                     sideMenu.IsOpen = false; Pump();
                     SetWindowPos(handle, IntPtr.Zero, (int)work.Left + 300, (int)docked.Top, 0, 0, 0x0215); Pump();
                     checkDock.Invoke(hud, null); Pump(); Pump(); DockAnimationTests.Wait(place);
-                    Check(Math.Abs(hud.Width - 282) < 1 && Math.Abs(hud.Height - 52) < 1 && place.SideEdge() == null, "moved off the edge, it turns back into a strip");
+                    Check(Math.Abs(hud.Width - 246) < 1 && Math.Abs(hud.Height - 52) < 1 && place.SideEdge() == null, "moved off the edge, it turns back into a strip");
                     // A drag's native settled notification can run before the deferred reanchor.
                     // Rechecking in that interval must not undo a right-edge layout change.
                     place.TryGetRect(out before);
@@ -145,7 +145,7 @@ namespace AgentHud.Tests
                     Pump(); Pump(); DockAnimationTests.Wait(place);
                     place.TryGetRect(out docked);
                     Console.WriteLine("Right docked rect " + docked + "; size " + hud.Width + "x" + hud.Height + ", edge " + place.SideEdge());
-                    Check(Math.Abs(hud.Width - 58) < 1 && Math.Abs(hud.Height - 290) < 1 && place.SideEdge() == "right" && Math.Abs(docked.Right - work.Right) <= 1 && work.Contains(docked), "repeated settled checks keep the column docked to the right edge");
+                    Check(Math.Abs(hud.Width - 58) < 1 && Math.Abs(hud.Height - 260) < 1 && place.SideEdge() == "right" && Math.Abs(docked.Right - work.Right) <= 1 && work.Contains(docked), "repeated settled checks keep the column docked to the right edge");
                     Click(hud, "MoreButton");
                     sideMenu = Menu(hud);
                     var menuRight = sideMenu.PointToScreen(new Point(sideMenu.ActualWidth - 14, 14)).X;
@@ -158,7 +158,7 @@ namespace AgentHud.Tests
                     checkDock.Invoke(hud, null); checkDock.Invoke(hud, null); Pump(); Pump(); DockAnimationTests.Wait(place);
                     place.TryGetRect(out before);
                     Console.WriteLine("Undocked right rect " + before + "; size " + hud.Width + "x" + hud.Height + ", edge " + place.SideEdge());
-                    Check(Math.Abs(hud.Width - 282) < 1 && place.SideEdge() == null && Math.Abs(before.Right - (work.Right - 60)) <= 1 && work.Contains(before), "undocking from the right restores a strip without jumping across the screen");
+                    Check(Math.Abs(hud.Width - 246) < 1 && place.SideEdge() == null && Math.Abs(before.Right - (work.Right - 60)) <= 1 && work.Contains(before), "undocking from the right restores a strip without jumping across the screen");
                     SetWindowPos(handle, IntPtr.Zero, (int)Math.Round(work.Right - before.Width), (int)Math.Round(work.Bottom - before.Height), 0, 0, 0x0215); Pump();
                     SendMessage(handle, 0x0232, IntPtr.Zero, IntPtr.Zero);
                     checkDock.Invoke(hud, null); checkDock.Invoke(hud, null); Pump(); Pump(); DockAnimationTests.Wait(place);

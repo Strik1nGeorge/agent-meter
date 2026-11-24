@@ -8,13 +8,13 @@ using System.Windows.Shapes;
 
 namespace AgentHud
 {
-    // The card shown while hovering an agent: every quota window the platform reports (the one in the
-    // ring marked), when each resets, what its agents are doing now, today's usage, and where it came from.
+    // The card shown while hovering an agent: every quota window the platform reports (each ring's window
+    // marked), when each resets, what its agents are doing now, today's usage, and where it came from.
     public static class AgentDetail
     {
         static readonly Color CodexTop = Color.FromRgb(0xb1, 0xa7, 0xff), CodexBottom = Color.FromRgb(0x39, 0x41, 0xff), Clay = Color.FromRgb(0xd9, 0x77, 0x57);
 
-        public static UIElement Build(Provider provider, bool codex, int period, double now, bool online, PetMood mood)
+        public static UIElement Build(Provider provider, bool codex, double now, bool online, PetMood mood)
         {
             var card = new StackPanel { Width = 236 };
             var limits = provider == null ? null : provider.limits;
@@ -43,12 +43,18 @@ namespace AgentHud
             header.Children.Add(title);
             card.Children.Add(header);
 
-            // Quota windows, shortest first; the one the ring shows is marked.
+            // Quota windows, shortest first, each marked with the ring it is drawn as.
             var windows = limits == null || limits.windows == null ? null : limits.windows.Where(w => w != null && w.remainingPercent.HasValue).OrderBy(w => w.windowMinutes ?? Double.MaxValue).ToList();
             if (windows != null && windows.Count > 0)
             {
-                var shown = RingValue.PickWindow(limits.windows, period);
-                foreach (var window in windows) card.Children.Add(WindowRow(window, window == shown && windows.Count > 1, codex, now, RingValue.WeeklyBlocker(limits, window, now)));
+                var outer = RingValue.OuterWindow(limits.windows);
+                var inner = RingValue.InnerWindow(limits.windows, outer);
+                foreach (var window in windows)
+                {
+                    var role = inner == null ? (window == outer && windows.Count > 1 ? Lang.T(" · 圆环显示", " · in the ring") : "")
+                        : window == outer ? Lang.T(" · 外圈", " · outer ring") : window == inner ? Lang.T(" · 内圈", " · inner ring") : "";
+                    card.Children.Add(WindowRow(window, role, codex, now, RingValue.WeeklyBlocker(limits, window, now)));
+                }
             }
             else
             {
@@ -89,7 +95,7 @@ namespace AgentHud
             return text;
         }
 
-        static UIElement WindowRow(QuotaWindow window, bool current, bool codex, double now, QuotaWindow weekly)
+        static UIElement WindowRow(QuotaWindow window, string role, bool codex, double now, QuotaWindow weekly)
         {
             var row = new StackPanel { Margin = new Thickness(0, 0, 0, 7) };
             var top = new DockPanel { LastChildFill = true };
@@ -100,8 +106,7 @@ namespace AgentHud
             if (!expired && percent < 20) value.SetResourceReference(TextBlock.ForegroundProperty, "Low");
             DockPanel.SetDock(value, Dock.Right);
             top.Children.Add(value);
-            var name = Lang.Server(window.name) ?? DurationName(window.windowMinutes);
-            top.Children.Add(Text(name + (current ? Lang.T(" · 圆环显示", " · in the ring") : ""), 12, FontWeights.Normal, false));
+            top.Children.Add(Text(RingValue.WindowName(window) + role, 12, FontWeights.Normal, false));
             row.Children.Add(top);
 
             // Bar in the platform's colour over its track.
@@ -138,15 +143,6 @@ namespace AgentHud
         }
         static TextBlock Paragraph(string text) { var block = Text(text, 11.5, FontWeights.Normal, true); block.Margin = new Thickness(0, 0, 0, 4); return block; }
 
-        // A window's name from its length, for when the service didn't name it.
-        static string DurationName(double? minutes)
-        {
-            if (!minutes.HasValue || minutes.Value <= 0) return Lang.T("额度", "Quota");
-            var m = minutes.Value;
-            if (m % 1440 == 0) return Lang.T(m / 1440 + " 天", m / 1440 + (m == 1440 ? " day" : " days"));
-            if (m % 60 == 0) return Lang.T(m / 60 + " 小时", m / 60 + (m == 60 ? " hour" : " hours"));
-            return Lang.T(m + " 分钟", m + " min");
-        }
         public static string Compact(double value)
         {
             if (value >= 1e9) return (value / 1e9).ToString("0.#", CultureInfo.InvariantCulture) + "B";

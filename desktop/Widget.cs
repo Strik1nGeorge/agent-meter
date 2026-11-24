@@ -97,8 +97,10 @@ namespace AgentHud
         Grid body;
         bool vertical;
         readonly Border tint = new Border();
+        readonly Border grain = new Border { IsHitTestVisible = false };
         readonly Border sheen = new Border { IsHitTestVisible = false };
         readonly Border edge = new Border { BorderThickness = new Thickness(1), IsHitTestVisible = false };
+        readonly Border highlight = new Border { BorderThickness = new Thickness(1), Margin = new Thickness(1), IsHitTestVisible = false };
         readonly Border rim = new Border { BorderThickness = new Thickness(1), Margin = new Thickness(1), IsHitTestVisible = false };
         readonly System.Windows.Shapes.Path pinShape = new System.Windows.Shapes.Path { Data = Geometry.Parse("M5,2 H11 L10.3,7.3 L12.5,10 H3.5 L5.7,7.3 Z M8,10 V14.5"), StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
         readonly System.Windows.Shapes.Path pinSlash = new System.Windows.Shapes.Path { Data = Geometry.Parse("M2,2 L14,14"), StrokeThickness = 1.5, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
@@ -107,7 +109,7 @@ namespace AgentHud
         Palette palette;
         WidgetState saved = new WidgetState();
         Snapshot snapshot;
-        Button periodButton, pinButton, langButton, moreButton;
+        Button pinButton, langButton, moreButton;
         ContextMenu menu;
         Forms.NotifyIcon tray;
         bool busy, online, exiting, degraded;
@@ -150,7 +152,6 @@ namespace AgentHud
             File.AppendAllText(Path.Combine(dataDir, "widget-startup.log"), "UI constructed\n");
             SetupTray();
             File.AppendAllText(Path.Combine(dataDir, "widget-startup.log"), "Tray constructed\n");
-            SetPeriod(saved.period);
             UpdatePin();
             RestorePosition();
             saveTimer.Interval = TimeSpan.FromMilliseconds(350);
@@ -199,15 +200,16 @@ namespace AgentHud
 
         void SetCornerRadius(double radius)
         {
-            tint.CornerRadius = sheen.CornerRadius = edge.CornerRadius = new CornerRadius(radius);
-            rim.CornerRadius = new CornerRadius(Math.Max(0, radius - 1));
+            tint.CornerRadius = grain.CornerRadius = sheen.CornerRadius = edge.CornerRadius = new CornerRadius(radius);
+            highlight.CornerRadius = rim.CornerRadius = new CornerRadius(Math.Max(0, radius - 1));
         }
 
         void ApplyTheme()
         {
             palette = Palette.Read();
             palette.ApplyTo(Application.Current.Resources);
-            tint.Background = palette.Tint; sheen.Background = palette.Sheen; edge.BorderBrush = palette.Edge;
+            tint.Background = palette.Tint; grain.Background = palette.Grain; sheen.Background = palette.Sheen;
+            edge.BorderBrush = palette.Edge; highlight.BorderBrush = palette.Highlight;
             rim.BorderBrush = degraded ? palette.RimOffline : palette.Rim;
             codex.ArcBrush = palette.CodexArc; codex.Track = palette.CodexTrack;
             claude.ArcBrush = palette.ClaudeArc; claude.Track = palette.ClaudeTrack;
@@ -215,11 +217,12 @@ namespace AgentHud
             if (pinButton != null) UpdatePin();
         }
 
-        // Glass layers: blurred backdrop (window accent) → grey-white tint → hairline edge; the rim turns heat-orange when offline.
+        // Glass layers: blurred backdrop (window accent) → grey-white tint → grain → top sheen → darker outer edge
+        // → bright inner highlight; the rim turns heat-orange when offline.
         UIElement BuildUi()
         {
             capsule = new Grid { Cursor = Cursors.SizeAll, Background = Brushes.Transparent };
-            capsule.Children.Add(tint); capsule.Children.Add(sheen); capsule.Children.Add(edge); capsule.Children.Add(rim);
+            foreach (var layer in new[] { tint, grain, sheen, edge, highlight, rim }) capsule.Children.Add(layer);
             body = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             capsule.Children.Add(body);
             codexTile = Tile(codexPet, codex, "CodexTile", out codexTip);
@@ -237,12 +240,6 @@ namespace AgentHud
             // One click pins, the next unpins.
             pinButton = IconButton(pinIcon, "PinButton");
             pinButton.Click += delegate { SetPinned(!saved.pinned); };
-
-            periodButton = new Button { Content = "5h", FontSize = 11, FontWeight = FontWeights.SemiBold, RenderTransform = new ScaleTransform() };
-            periodButton.SetResourceReference(StyleProperty, "GlassChip");
-            AutomationProperties.SetAutomationId(periodButton, "PeriodButton");
-            periodButton.Click += delegate { SetPeriod(saved.period == 300 ? 10080 : 300); };
-            AddPressFeedback(periodButton, .94);
 
             // The menu lives behind ⋯ rather than on right-click, so it can be found by looking.
             var dots = new GeometryGroup();
@@ -281,13 +278,13 @@ namespace AgentHud
 
         // Two layouts from the same parts. The strip (docked nowhere, or to the top or bottom) reads left to right;
         // against the left or right edge of the screen it becomes a column, pets above rings, buttons below.
-        static Size LayoutSize(bool column) { return column ? new Size(58, 290) : new Size(282, 52); }
+        static Size LayoutSize(bool column) { return column ? new Size(58, 260) : new Size(246, 52); }
         void Arrange(bool column, bool resizeWindow = true)
         {
             vertical = column;
             body.Children.Clear(); body.RowDefinitions.Clear(); body.ColumnDefinitions.Clear();
             var tiles = new[] { codexTile, claudeTile };
-            var buttons = new[] { langButton, pinButton, periodButton, moreButton };
+            var buttons = new[] { langButton, pinButton, moreButton };
             foreach (var tile in tiles)
             {
                 tile.Orientation = column ? Orientation.Vertical : Orientation.Horizontal;
@@ -300,7 +297,7 @@ namespace AgentHud
             }
             foreach (var ring in new[] { codex, claude }) { ring.HorizontalAlignment = HorizontalAlignment.Center; ring.VerticalAlignment = VerticalAlignment.Center; }
             // -1 = the rest, -2 = as large as the tile.
-            var track = column ? new[] { 8.0, -2, 10, -2, -1, 28, 28, 34, 24, 6 } : new[] { 8.0, -2, 10, -2, -1, 24, 22, 40, 18, 6 };
+            var track = column ? new[] { 8.0, -2, 10, -2, -1, 28, 28, 24, 6 } : new[] { 8.0, -2, 10, -2, -1, 24, 22, 18, 6 };
             foreach (var size in track)
             {
                 var length = size == -2 ? GridLength.Auto : size < 0 ? new GridLength(1, GridUnitType.Star) : new GridLength(size);
@@ -310,7 +307,7 @@ namespace AgentHud
             for (var i = 0; i < buttons.Length; i++)
             {
                 // Each button keeps the whole strip's height (or the column's width) as hit area; the visible chip stays small.
-                buttons[i].Width = column ? (buttons[i] == periodButton ? 44 : 36) : track[5 + i];
+                buttons[i].Width = column ? 36 : track[5 + i];
                 buttons[i].Height = column ? track[5 + i] : 50;
                 Place(buttons[i], 5 + i, column);
             }
@@ -349,7 +346,7 @@ namespace AgentHud
                 if (known)
                 {
                     menu.IsOpen = false; codexTip.IsOpen = false; claudeTip.IsOpen = false;
-                    var motion = new LayoutTransition(capsule, before, codexPet, codex, claudePet, claude, langButton, pinButton, periodButton, moreButton);
+                    var motion = new LayoutTransition(capsule, before, codexPet, codex, claudePet, claude, langButton, pinButton, moreButton);
                     placement.Reanchor(before, edge, LayoutSize(column), delegate { motion.Prepare(delegate { Arrange(column, false); }); }, motion.Render, motion.Finish);
                     return; // Reanchor saves and settles once the new geometry is in place.
                 }
@@ -446,17 +443,7 @@ namespace AgentHud
             if (oldTray != null) oldTray.Dispose();
             UpdatePin();
             codexPet.Relabel(); claudePet.Relabel();
-            SetPeriod(saved.period);
-            RefreshCard(true, false); RefreshCard(false, false);
-        }
-        void SetPeriod(int period)
-        {
-            saved.period = period == 10080 ? 10080 : 300;
-            if (periodButton == null) return;
-            periodButton.Content = saved.period == 300 ? "5h" : "7d";
-            periodButton.ToolTip = saved.period == 300 ? Lang.T("当前 5 小时额度 · 点击查看 7 天", "5-hour quota · click for 7-day") : Lang.T("当前 7 天额度 · 点击查看 5 小时", "7-day quota · click for 5-hour");
-            AutomationProperties.SetName(periodButton, Lang.T("点击切换 5 小时 / 7 天额度", "Switch between 5-hour and 7-day quota"));
-            RenderData(); if (IsLoaded) SaveState();
+            RenderData();
         }
         // Shared by the pin button and the menu item, so both always agree.
         // If Windows refuses the z-order change, the previous state is kept.
@@ -513,10 +500,11 @@ namespace AgentHud
             if (!IsVisible || exiting) return;
             var now = RingValue.Now();
             var cp = ProviderFor("codex"); var ap = ProviderFor("claude");
-            var c = RingValue.From(cp, saved.period, now, online);
-            var a = RingValue.From(ap, saved.period, now, online);
+            var c = RingValue.Rings(cp, now, online);
+            var a = RingValue.Rings(ap, now, online);
             codex.Update(c, !online); claude.Update(a, !online);
-            codexPet.SetMood(AgentPet.MoodFor(cp, c, online, now)); claudePet.SetMood(AgentPet.MoodFor(ap, a, online, now));
+            // The pets go by the number in the middle: the window that runs out first.
+            codexPet.SetMood(AgentPet.MoodFor(cp, c.Center, online, now)); claudePet.SetMood(AgentPet.MoodFor(ap, a.Center, online, now));
             RefreshCard(true, false); RefreshCard(false, false);
             var scanStale = snapshot != null && (!snapshot.collectedAt.HasValue || now - snapshot.collectedAt.Value > 30000);
             // Offline: orange edge *and* the word "离线" under each ring — colour is never the only signal.
@@ -529,6 +517,7 @@ namespace AgentHud
                     : snapshot.loading ? Lang.T("正在读取额度", "Reading quotas")
                     : scanStale ? Lang.T("会话扫描延迟，额度不受影响", "Session scan delayed; quotas are unaffected")
                     : Lang.T("每 5 秒读取本地快照；平台额度按各自频率更新", "Reads the local snapshot every 5 s; each platform's quota updates on its own schedule"))
+                + (c.Inner != null || a.Inner != null ? Lang.T("\n外圈 5 小时、内圈 7 天，中间显示剩余较少的那个", "\nOuter ring 5-hour, inner ring 7-day; the middle shows whichever has less left") : "")
                 + Lang.T("\n悬停宠物或圆环查看该 agent 的详情", "\nHover a pet or ring for that agent's details");
             if (!Equals(capsule.ToolTip, detail)) capsule.ToolTip = detail;
         }
@@ -542,7 +531,7 @@ namespace AgentHud
             var tip = forCodex ? codexTip : claudeTip;
             if (tip == null || (!opening && !tip.IsOpen)) return;
             var pet = forCodex ? codexPet : claudePet;
-            tip.Content = AgentDetail.Build(ProviderFor(forCodex ? "codex" : "claude"), forCodex, saved.period, RingValue.Now(), online, pet.Mood);
+            tip.Content = AgentDetail.Build(ProviderFor(forCodex ? "codex" : "claude"), forCodex, RingValue.Now(), online, pet.Mood);
         }
         void OpenDashboard() { try { Process.Start(new ProcessStartInfo(server.AbsoluteUri) { UseShellExecute = true }); } catch { } }
         void OpenClaudeUsage() { try { Process.Start(new ProcessStartInfo("https://claude.ai/settings/usage") { UseShellExecute = true }); } catch { } }

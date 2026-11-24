@@ -58,12 +58,20 @@ namespace AgentHud
         public double? offsetX { get; set; }
         public double? offsetY { get; set; }
         public bool pinned { get; set; }
-        public int period { get; set; }
         // "auto" (follow Windows), "zh" or "en".
         public string language { get; set; }
         // "left" / "right" when docked to that side of the screen (vertical layout); null otherwise.
         public string dock { get; set; }
-        public WidgetState() { pinned = true; period = 300; language = "auto"; }
+        public WidgetState() { pinned = true; language = "auto"; }
+    }
+    // One platform's rings. The outer ring is its shortest window (5 hours on most plans); the thinner inner
+    // ring is the account-wide window after it (7 days), when the plan has one. The middle of the ring shows
+    // whichever has less left, since that is the one that runs out first.
+    public class RingSet
+    {
+        public RingValue Outer, Inner;
+        public bool CenterInner;
+        public RingValue Center { get { return CenterInner ? Inner : Outer; } }
     }
     public static class RingStatus
     {
@@ -76,6 +84,8 @@ namespace AgentHud
         public double? ResetsAt;
         public bool Stale;
         public string Status = RingStatus.Waiting;
+        // The window's name ("5 小时" / "5 hours"), when there is one.
+        public string Name;
         public string Caption;
         public string Detail;
         public static double Now() { return (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds; }
@@ -83,21 +93,32 @@ namespace AgentHud
         static readonly string[] WeekDaysZh = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
         static readonly string[] WeekDaysEn = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 
-        public static RingValue From(Provider provider, int period, double now, bool online)
+        public static RingSet Rings(Provider provider, double now, bool online)
+        {
+            var windows = provider == null || provider.limits == null ? null : provider.limits.windows;
+            var outer = OuterWindow(windows);
+            var inner = InnerWindow(windows, outer);
+            var set = new RingSet { Outer = ForWindow(provider, outer, now, online), Inner = inner == null ? null : ForWindow(provider, inner, now, online) };
+            // A number beats a status word in the middle; between two numbers the lower one goes there.
+            set.CenterInner = set.Inner != null && set.Inner.Percent.HasValue && (!set.Outer.Percent.HasValue || set.Inner.Percent.Value < set.Outer.Percent.Value);
+            return set;
+        }
+
+        static RingValue ForWindow(Provider provider, QuotaWindow win, double now, bool online)
         {
             var result = new RingValue { Caption = Lang.T("等待数据", "Waiting for data"), Detail = Lang.T("等待平台提供额度，未将未知值当作零。", "Waiting for the platform to report its quota; an unknown value is never treated as zero.") };
             if (provider == null) return result;
             var limits = provider.limits;
-            var win = PickWindow(limits == null ? null : limits.windows, period);
             if (win == null)
             {
                 result.Status = provider.quotaStatus == "desktop-connection-disabled" ? RingStatus.Setup : provider.quotaStatus == "desktop-not-connected" ? RingStatus.NotLinked : RingStatus.Unavailable;
                 result.Caption = result.Status == RingStatus.Setup ? Lang.T("等待连接", "Connection not enabled") : result.Status == RingStatus.NotLinked ? Lang.T("桌面版未接入", "Desktop app not linked") : Lang.T("额度未提供", "Quota not provided");
-                result.Detail = Lang.Server(provider.quotaMessage) ?? Lang.T("这个平台还没有提供所选周期的额度。可打开完整面板查看接入状态。", "This platform hasn't reported a quota for the selected window yet. Open the dashboard to check the connection.");
+                result.Detail = Lang.Server(provider.quotaMessage) ?? Lang.T("这个平台还没有提供额度。可打开完整面板查看接入状态。", "This platform hasn't reported a quota yet. Open the dashboard to check the connection.");
                 result.Detail += "\n" + UpdatedText(limits == null ? null : limits.collectedAt, now);
                 result.Detail += provider.id == "claude" ? Lang.T("\n点 ⋯ → Claude 官方用量，查看当前账户额度。", "\n⋯ → Claude usage shows this account's quota.") : Lang.T("\n点 ⋯ → Codex 官方用量，查看当前账户额度。", "\n⋯ → Codex usage shows this account's quota.");
                 return result;
             }
+            result.Name = WindowName(win);
             var weekly = WeeklyBlocker(limits, win, now);
             if (weekly == null && win.resetsAt.HasValue && win.resetsAt.Value <= now)
             {
@@ -118,9 +139,6 @@ namespace AgentHud
             else if (limits.source == "Claude 桌面账户额度") result.Detail += Lang.T("\n正常约每 5 分钟查询，连接失败时可能延迟。", "\nNormally queried about every 5 minutes; may lag when the connection fails.");
             result.Detail += Lang.T("\n同一平台账户内共享，非单个 agent 的独立额度。", "\nShared across the platform account, not a per-agent quota.");
             if (weekly != null) result.Detail += "\n" + WeeklyBlockedText(win);
-            if (win.windowMinutes != period)
-                result.Detail += Lang.T("\n此账户没有" + PeriodName(period, false) + "额度，这里显示的是" + PeriodName(win.windowMinutes ?? 0, false) + "额度。",
-                    "\nThis account has no " + PeriodName(period, true) + " quota; showing its " + PeriodName(win.windowMinutes ?? 0, true) + " quota instead.");
             if (!String.IsNullOrEmpty(provider.quotaMessage)) result.Detail += "\n" + Lang.Server(provider.quotaMessage);
             if (result.Stale) result.Caption = Lang.T("快照 · ", "Snapshot · ") + result.Caption;
             return result;
@@ -130,11 +148,14 @@ namespace AgentHud
         public static QuotaWindow WeeklyBlocker(Limits limits, QuotaWindow window, double now)
         {
             if (window == null || window.windowMinutes != 300 || limits == null || limits.windows == null) return null;
-            return limits.windows.FirstOrDefault(w => w != null && w.windowMinutes == 10080
-                && (String.IsNullOrEmpty(w.id) || w.id == "seven_day")
-                && (String.IsNullOrEmpty(w.name) || !w.name.Contains("·"))
+            return limits.windows.FirstOrDefault(w => w != null && w.windowMinutes == 10080 && AccountWide(w)
                 && w.remainingPercent.HasValue && !Double.IsInfinity(w.remainingPercent.Value) && w.remainingPercent.Value <= 0
                 && (!w.resetsAt.HasValue || w.resetsAt.Value > now));
+        }
+        // Windows for the whole account, not one model's (Claude's "Opus · 7 天", Codex's per-model buckets).
+        static bool AccountWide(QuotaWindow w)
+        {
+            return (String.IsNullOrEmpty(w.id) || w.id == "five_hour" || w.id == "seven_day") && (String.IsNullOrEmpty(w.name) || !w.name.Contains("·"));
         }
         public static double? EffectiveReset(QuotaWindow window, QuotaWindow weekly, double now)
         {
@@ -153,20 +174,35 @@ namespace AgentHud
             }
             return note;
         }
-        // Plans differ: the free plan reports one 30-day window instead of 5 h / 7 d. The selected window wins;
-        // without it the ring shows the account's nearest window rather than nothing, and the tooltip says so.
-        public static QuotaWindow PickWindow(List<QuotaWindow> windows, int period)
+        // Plans differ: most report 5 h and 7 d, the free plan one 30-day window. The outer ring takes the
+        // shortest account-wide window (any window, if the plan only has model-specific ones), the inner ring
+        // the next longer account-wide one.
+        public static QuotaWindow OuterWindow(List<QuotaWindow> windows)
         {
-            if (windows == null) return null;
-            var usable = windows.Where(w => w != null && w.remainingPercent.HasValue && !Double.IsNaN(w.remainingPercent.Value) && !Double.IsInfinity(w.remainingPercent.Value)).ToList();
-            return usable.FirstOrDefault(w => w.windowMinutes == period)
-                ?? usable.Where(w => w.windowMinutes > 0).OrderBy(w => Math.Abs(Math.Log(w.windowMinutes.Value / period))).FirstOrDefault();
+            var usable = Usable(windows);
+            return usable.Where(AccountWide).OrderBy(w => w.windowMinutes).FirstOrDefault() ?? usable.OrderBy(w => w.windowMinutes).FirstOrDefault();
         }
-        static string PeriodName(double minutes, bool english)
+        public static QuotaWindow InnerWindow(List<QuotaWindow> windows, QuotaWindow outer)
         {
-            if (minutes > 0 && minutes % 1440 == 0) return english ? (minutes / 1440) + "-day" : " " + (minutes / 1440) + " 天";
-            if (minutes > 0 && minutes % 60 == 0) return english ? (minutes / 60) + "-hour" : " " + (minutes / 60) + " 小时";
-            return english ? minutes + "-minute" : " " + minutes + " 分钟";
+            if (outer == null) return null;
+            return Usable(windows).Where(w => AccountWide(w) && w.windowMinutes > outer.windowMinutes).OrderBy(w => w.windowMinutes).FirstOrDefault();
+        }
+        // A window can go in a ring once it has a real percentage and a length.
+        static List<QuotaWindow> Usable(List<QuotaWindow> windows)
+        {
+            if (windows == null) return new List<QuotaWindow>();
+            return windows.Where(w => w != null && w.remainingPercent.HasValue && !Double.IsNaN(w.remainingPercent.Value) && !Double.IsInfinity(w.remainingPercent.Value) && w.windowMinutes > 0).ToList();
+        }
+        // The service's name for a window, or one made from its length.
+        public static string WindowName(QuotaWindow window)
+        {
+            var name = Lang.Server(window.name);
+            if (name != null) return name;
+            if (!window.windowMinutes.HasValue || window.windowMinutes.Value <= 0) return Lang.T("额度", "Quota");
+            var m = window.windowMinutes.Value;
+            if (m % 1440 == 0) return Lang.T(m / 1440 + " 天", m / 1440 + (m == 1440 ? " day" : " days"));
+            if (m % 60 == 0) return Lang.T(m / 60 + " 小时", m / 60 + (m == 60 ? " hour" : " hours"));
+            return Lang.T(m + " 分钟", m + " min");
         }
         public static string UpdatedText(double? collectedAt, double now)
         {

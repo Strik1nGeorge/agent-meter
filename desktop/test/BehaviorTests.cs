@@ -50,9 +50,9 @@ namespace AgentHud.Tests
             Check(RingValue.UpdatedText(null, now).Contains("未知"), "missing timestamp is not reported as fresh");
             Check(RingValue.UpdatedText(now + 120000, now).Contains("异常"), "future timestamps are not reported as fresh");
             var provider = ProviderAt(now);
-            var live = RingValue.From(provider, 300, now, true);
+            var live = RingValue.Rings(provider, now, true).Outer;
             Check(live.Detail.Contains("4 分钟前") && live.Detail.Contains("5 分钟查询") && live.Detail.Contains("后重置"), "update age, polling cadence and reset countdown remain distinct");
-            Check(RingValue.From(provider, 300, now, false).Detail.Contains("历史快照"), "offline quotas retain their real age and snapshot label");
+            Check(RingValue.Rings(provider, now, false).Outer.Detail.Contains("历史快照"), "offline quotas retain their real age and snapshot label");
             Check(live.ResetsAt == provider.limits.windows[0].resetsAt && live.Detail.Contains("（"), "tooltip pairs the reset countdown with its date and time");
             Func<DateTime, double> stamp = local => (local.ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
             var monday = stamp(new DateTime(2026, 10, 19, 10, 0, 0, DateTimeKind.Local));
@@ -64,72 +64,101 @@ namespace AgentHud.Tests
             var ring = new QuotaRing { Platform = "Codex" };
             ring.Update(live, false);
             Check(ring.Primary == "80%" && ring.Secondary != null && ring.Secondary.Contains(":"), "the ring shows the percentage with the reset time under it");
-            ring.Update(RingValue.From(provider, 300, now, false), true);
+            ring.Update(RingValue.Rings(provider, now, false).Outer, true);
             Check(ring.Primary == "80%" && ring.Secondary == "离线", "offline keeps the number and says offline instead of a reset time");
             provider.limits.windows[0].resetsAt = null;
-            ring.Update(RingValue.From(provider, 300, now, true), false);
+            ring.Update(RingValue.Rings(provider, now, true).Outer, false);
             Check(ring.Secondary == "剩余", "without a reset time the ring says what the number is");
             provider.limits.windows[0].resetsAt = now - 1;
-            Check(!RingValue.From(provider, 300, now, true).Percent.HasValue, "expired quota is not shown as a live percentage");
-            ring.Update(RingValue.From(provider, 300, now, true), false);
+            Check(!RingValue.Rings(provider, now, true).Outer.Percent.HasValue, "expired quota is not shown as a live percentage");
+            ring.Update(RingValue.Rings(provider, now, true).Outer, false);
             Check(ring.Primary == "待更新" && ring.Secondary == null, "an expired quota shows a status word in the ring");
             var free = new Provider { id = "codex", limits = new Limits { collectedAt = now - 60000, staleAfterMs = 360000, source = "Codex 官方额度接口", windows = new List<QuotaWindow> {
                 new QuotaWindow { windowMinutes = 43200, remainingPercent = 100, resetsAt = now + 30 * 86400000.0 } } } };
-            var freeRing = RingValue.From(free, 300, now, true);
-            Check(freeRing.Percent == 100 && RingValue.From(free, 10080, now, true).Percent == 100 && freeRing.Detail.Contains("此账户没有 5 小时额度，这里显示的是 30 天额度"), "an account with only a 30-day window shows it under 5h and 7d and says so");
+            var freeRings = RingValue.Rings(free, now, true);
+            Check(freeRings.Outer.Percent == 100 && freeRings.Inner == null && freeRings.Center == freeRings.Outer && freeRings.Outer.Name == "30 天", "a plan with only a 30-day window gets a single ring for it");
             Check(RingValue.RingBadge(stamp(new DateTime(2026, 11, 24, 14, 2, 0, DateTimeKind.Local)), monday) == "11/24", "a reset weeks away shows its date instead of a weekday");
-            Check(!RingValue.From(ProviderAt(now), 300, now, true).Detail.Contains("此账户没有"), "an account with the selected window shows no fallback note");
+
+            // Nested rings: 5 hours outside, the account's 7 days inside, the lower number in the middle.
+            var weekly = ProviderAt(now); weekly.limits.windows[1].resetsAt = now + 3 * 86400000.0;
+            var rings = RingValue.Rings(weekly, now, true);
+            Check(rings.Outer.Percent == 80 && rings.Inner.Percent == 65 && rings.CenterInner && rings.Center.Percent == 65, "5 hours is the outer ring, 7 days the inner, and the lower one goes in the middle");
+            var nested = new QuotaRing { Platform = "Codex" };
+            nested.Update(rings, false);
+            var spoken = System.Windows.Automation.AutomationProperties.GetName(nested);
+            Check(nested.Percent == 80 && nested.HasInner && nested.InnerPercent == 65 && nested.Primary == "65%" && nested.Secondary.StartsWith("周"), "the ring draws both windows and shows the tighter one's number and reset day");
+            Check(spoken.Contains("剩余额度 65%") && spoken.Contains("外圈 5 小时 80%") && spoken.Contains("内圈 7 天 65%"), "screen readers hear the middle number and both rings");
+            nested.Update(freeRings, false);
+            Check(!nested.HasInner && nested.Primary == "100%", "the same ring drops back to a single window");
+            var tied = ProviderAt(now); tied.limits.windows[1].remainingPercent = 80;
+            Check(!RingValue.Rings(tied, now, true).CenterInner, "on a tie the outer ring keeps the middle");
+            var scoped = ProviderAt(now); scoped.limits.windows[1].id = "seven_day_opus"; scoped.limits.windows[1].name = "Opus · 7 天";
+            Check(RingValue.Rings(scoped, now, true).Inner == null, "a model-specific weekly window does not become the inner ring");
+            var bucket = ProviderAt(now); bucket.limits.windows.Insert(0, new QuotaWindow { name = "Spark · 1 小时", windowMinutes = 60, remainingPercent = 5, resetsAt = now + 1800000 });
+            var bucketRings = RingValue.Rings(bucket, now, true);
+            Check(bucketRings.Outer.Percent == 80 && bucketRings.Inner.Percent == 65, "a model's own shorter bucket does not take over the account's rings");
+            var lapsed = ProviderAt(now); lapsed.limits.windows[0].resetsAt = now - 1;
+            var lapsedRings = RingValue.Rings(lapsed, now, true);
+            Check(lapsedRings.CenterInner && lapsedRings.Center.Percent == 65, "a 5-hour snapshot past its reset leaves the 7-day number in the middle instead of a status word");
             CheckWeeklyLimit(now);
 
             // Pets: an empty window beats work, work beats a low quota, and offline beats everything.
             var busy = ProviderAt(now); busy.activity = new Activity { working = true, activeSessions = 2, todayTokens = 1234567, todayRequests = 42, model = "gpt-6.1-sol", effort = "xhigh", lastActiveAt = now - 30000 };
-            var busyRing = RingValue.From(busy, 300, now, true);
+            var busyRing = RingValue.Rings(busy, now, true).Center;
             Check(AgentPet.MoodFor(busy, busyRing, true, now) == PetMood.Working, "a platform with a working session gets a working pet");
             Check(AgentPet.MoodFor(busy, busyRing, false, now) == PetMood.Offline, "an offline service greys the pet");
             busy.limits.windows[1].remainingPercent = 0;
-            Check(AgentPet.MoodFor(busy, RingValue.From(busy, 300, now, true), true, now) == PetMood.Exhausted, "any used-up window puts the pet to sleep, even while working");
+            Check(AgentPet.MoodFor(busy, RingValue.Rings(busy, now, true).Center, true, now) == PetMood.Exhausted, "any used-up window puts the pet to sleep, even while working");
             busy.limits.windows[1].remainingPercent = 65; busy.limits.windows[0].remainingPercent = 12; busy.activity.working = false;
-            Check(AgentPet.MoodFor(busy, RingValue.From(busy, 300, now, true), true, now) == PetMood.Tired, "under 20% left the idle pet is tired");
-            busy.limits.windows[0].remainingPercent = 80;
-            Check(AgentPet.MoodFor(busy, RingValue.From(busy, 300, now, true), true, now) == PetMood.Idle, "otherwise the pet idles");
+            Check(AgentPet.MoodFor(busy, RingValue.Rings(busy, now, true).Center, true, now) == PetMood.Tired, "under 20% left the idle pet is tired");
+            busy.limits.windows[0].remainingPercent = 80; busy.limits.windows[1].remainingPercent = 15;
+            Check(AgentPet.MoodFor(busy, RingValue.Rings(busy, now, true).Center, true, now) == PetMood.Tired, "a low weekly balance tires the pet even with the 5 hours nearly full");
+            busy.limits.windows[1].remainingPercent = 65;
+            Check(AgentPet.MoodFor(busy, RingValue.Rings(busy, now, true).Center, true, now) == PetMood.Idle, "otherwise the pet idles");
             var pet = new AgentPet(false);
             foreach (PetMood mood in Enum.GetValues(typeof(PetMood))) { pet.SetMood(mood); pet.Pause(); pet.Resume(); }
             Check(pet.Mood == PetMood.Exhausted, "every pet mood can be shown, paused and resumed");
 
             // Hover card: every window with its reset, today's usage, the latest model and the source.
             busy.activity.working = true;
-            var card = AgentDetail.Build(busy, true, 300, now, true, PetMood.Working);
+            var card = AgentDetail.Build(busy, true, now, true, PetMood.Working);
             var cardText = String.Join("\n", Texts(card));
-            Check(cardText.Contains("Codex") && cardText.Contains("5 小时") && cardText.Contains("7 天") && cardText.Contains("圆环显示") && cardText.Contains("80%") && cardText.Contains("65%"), "the card lists every quota window and marks the one in the ring");
+            Check(cardText.Contains("Codex") && cardText.Contains("5 小时 · 外圈") && cardText.Contains("7 天 · 内圈") && cardText.Contains("80%") && cardText.Contains("65%"), "the card lists every quota window and marks which ring each one is");
             Check(cardText.Contains("后重置") && cardText.Contains("今日 1.2M tokens · 42 次请求") && cardText.Contains("gpt-6.1-sol · xhigh") && cardText.Contains("工作中 · 2 个会话") && cardText.Contains("Claude 桌面账户额度"), "the card shows resets, today's usage, the latest model, what the agents are doing and the source");
-            var emptyCard = String.Join("\n", Texts(AgentDetail.Build(new Provider { id = "claude", quotaMessage = "未找到 Claude 桌面版登录连接，请先打开 Claude 并登录。" }, false, 300, now, true, PetMood.Idle)));
+            var single = new Provider { id = "codex", limits = new Limits { collectedAt = now, windows = new List<QuotaWindow> { free.limits.windows[0], new QuotaWindow { name = "支出额度", remainingPercent = 40 } } } };
+            var singleCard = String.Join("\n", Texts(AgentDetail.Build(single, true, now, true, PetMood.Idle)));
+            Check(singleCard.Contains("30 天 · 圆环显示") && singleCard.Contains("支出额度") && !singleCard.Contains("外圈"), "with a single ring the card marks the window in it");
+            var emptyCard = String.Join("\n", Texts(AgentDetail.Build(new Provider { id = "claude", quotaMessage = "未找到 Claude 桌面版登录连接，请先打开 Claude 并登录。" }, false, now, true, PetMood.Idle)));
             Check(emptyCard.Contains("未找到 Claude 桌面版登录连接"), "without a quota the card explains why");
 
             // Docking: a window flush against the left or right edge of its work area is docked there.
             var work = new Rect(0, 0, 2560, 1400);
-            Check(WindowPlacement.SideEdge(new Rect(0, 300, 58, 290), work, 2) == "left" && WindowPlacement.SideEdge(new Rect(2502, 300, 58, 290), work, 2) == "right" && WindowPlacement.SideEdge(new Rect(40, 0, 282, 52), work, 2) == null, "only the left and right edges dock");
+            Check(WindowPlacement.SideEdge(new Rect(0, 300, 58, 260), work, 2) == "left" && WindowPlacement.SideEdge(new Rect(2502, 300, 58, 260), work, 2) == "right" && WindowPlacement.SideEdge(new Rect(40, 0, 246, 52), work, 2) == null, "only the left and right edges dock");
 
             Lang.Apply("en");
             try
             {
                 var english = ProviderAt(now);
-                var enLive = RingValue.From(english, 300, now, true);
+                var enLive = RingValue.Rings(english, now, true).Outer;
                 Check(RingValue.UpdatedText(now - 4 * 60000, now).Contains("4 min ago") && enLive.Detail.Contains("Resets in") && enLive.Detail.Contains("Claude desktop account"), "English tooltip translates age, countdown and the service's source name");
                 Check(RingValue.RingBadge(stamp(new DateTime(2026, 10, 22, 9, 0, 0, DateTimeKind.Local)), monday) == "Thu", "English reset days away shows the weekday");
-                Check(RingValue.From(free, 300, now, true).Detail.Contains("no 5-hour quota; showing its 30-day quota"), "English names the fallback window");
+                var enNested = new QuotaRing { Platform = "Codex" };
+                enNested.Update(RingValue.Rings(english, now, true), false);
+                var enSpoken = System.Windows.Automation.AutomationProperties.GetName(enNested);
+                Check(enSpoken.Contains("quota remaining 65%") && enSpoken.Contains("outer ring 5 hours 80%") && enSpoken.Contains("inner ring 7 days 65%"), "English screen-reader name covers both rings");
                 var enRing = new QuotaRing { Platform = "Codex" };
-                enRing.Update(RingValue.From(english, 300, now, false), true);
+                enRing.Update(RingValue.Rings(english, now, false).Outer, true);
                 Check(enRing.Secondary == "Offline", "English offline word in the ring");
                 english.limits.windows[0].resetsAt = null;
-                enRing.Update(RingValue.From(english, 300, now, true), false);
+                enRing.Update(RingValue.Rings(english, now, true).Outer, false);
                 Check(enRing.Secondary == "left", "English fallback says what the number is");
                 var setup = new Provider { id = "claude", quotaStatus = "desktop-connection-disabled", quotaMessage = "桌面版账户额度读取通道已准备好，尚未启用连接。" };
-                var setupRing = RingValue.From(setup, 300, now, true);
+                var setupRing = RingValue.Rings(setup, now, true).Outer;
                 enRing.Update(setupRing, false);
                 Check(enRing.Primary == "Setup" && setupRing.Detail.StartsWith("The Claude desktop account connection"), "English status words come from status codes, not Chinese captions");
                 busy.activity.todayRequests = 1;
-                var enCard = String.Join("\n", Texts(AgentDetail.Build(busy, true, 300, now, true, PetMood.Working)));
-                Check(enCard.Contains("Today 1.2M tokens · 1 request") && enCard.Contains("in the ring") && enCard.Contains("Working · 2 sessions"), "the card speaks English too");
+                var enCard = String.Join("\n", Texts(AgentDetail.Build(busy, true, now, true, PetMood.Working)));
+                Check(enCard.Contains("Today 1.2M tokens · 1 request") && enCard.Contains("5 hours · outer ring") && enCard.Contains("7 days · inner ring") && enCard.Contains("Working · 2 sessions"), "the card speaks English too");
                 Check(Lang.Server("5 小时") == "5 hours" && Lang.Server("7 天") == "7 days" && Lang.Server("Opus · 7 天") == "Opus · 7 days" && Lang.Server("30 天") == "30 days" && Lang.Server("90 分钟") == "90 min" && Lang.Server("支出额度") == "Spend limit", "the service's window names are translated");
             }
             finally { Lang.Apply("zh"); }
@@ -170,32 +199,32 @@ namespace AgentHud.Tests
             var shortWindow = provider.limits.windows[0];
             var week = provider.limits.windows[1];
             week.remainingPercent = 0;
-            var shown = RingValue.From(provider, 300, now, true);
+            var shown = RingValue.Rings(provider, now, true).Outer;
             Check(shown.Percent == 0 && shown.ResetsAt == week.resetsAt && shortWindow.remainingPercent == 80, "an exhausted week makes the 5-hour ring zero without changing platform data");
             Check(shown.Detail.Contains("周额度已用尽") && shown.Detail.Contains("原始剩余：80%"), "the weekly limit explains why available and reported 5-hour quota differ");
-            var text = String.Join("\n", Texts(AgentDetail.Build(provider, true, 300, now, true, PetMood.Exhausted)));
+            var text = String.Join("\n", Texts(AgentDetail.Build(provider, true, now, true, PetMood.Exhausted)));
             Check(text.Contains("0%") && text.Contains("周额度已用尽") && text.Contains("原始剩余：80%"), "the hover card shows zero availability and retains the reported percentage");
             provider.id = "claude";
-            Check(RingValue.From(provider, 300, now, true).Percent == 0 && RingValue.From(provider, 10080, now, true).Percent == 0, "the weekly rule applies to Claude and keeps the weekly view at zero");
-            Check(RingValue.From(provider, 300, now, false).Percent == 0 && RingValue.From(provider, 300, now, false).Stale, "offline snapshots keep the weekly restriction and their stale label");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 0 && RingValue.Rings(provider, now, true).Inner.Percent == 0, "the weekly rule applies to Claude, and the inner ring shows the empty week");
+            Check(RingValue.Rings(provider, now, false).Outer.Percent == 0 && RingValue.Rings(provider, now, false).Outer.Stale, "offline snapshots keep the weekly restriction and their stale label");
             week.remainingPercent = .1;
-            Check(RingValue.From(provider, 300, now, true).Percent == 80, "a small positive weekly balance is not treated as exhausted");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 80, "a small positive weekly balance is not treated as exhausted");
             week.remainingPercent = null;
-            Check(RingValue.From(provider, 300, now, true).Percent == 80, "an unknown weekly balance does not zero the 5-hour quota");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 80, "an unknown weekly balance does not zero the 5-hour quota");
             week.remainingPercent = 0; week.resetsAt = now - 1;
-            Check(RingValue.From(provider, 300, now, true).Percent == 80, "a weekly reset that already passed cannot keep blocking the 5-hour quota");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 80, "a weekly reset that already passed cannot keep blocking the 5-hour quota");
             week.resetsAt = now + 86400000; week.id = "seven_day_opus"; week.name = "Opus · 7 天";
-            Check(RingValue.From(provider, 300, now, true).Percent == 80, "a model-specific weekly limit cannot zero the entire account");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 80, "a model-specific weekly limit cannot zero the entire account");
             week.id = null;
-            Check(RingValue.From(provider, 300, now, true).Percent == 80, "a named model-specific weekly snapshot remains scoped without an id");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 80, "a named model-specific weekly snapshot remains scoped without an id");
             week.id = "seven_day"; week.name = "7 天"; shortWindow.resetsAt = now - 1;
-            Check(RingValue.From(provider, 300, now, true).Percent == 0, "a known active weekly block still shows zero when the 5-hour snapshot expired");
+            Check(RingValue.Rings(provider, now, true).Outer.Percent == 0, "a known active weekly block still shows zero when the 5-hour snapshot expired");
             shortWindow.remainingPercent = 0; shortWindow.resetsAt = now + 2 * 86400000;
-            Check(RingValue.From(provider, 300, now, true).ResetsAt == shortWindow.resetsAt, "when both windows are exhausted the later reset controls availability");
+            Check(RingValue.Rings(provider, now, true).Outer.ResetsAt == shortWindow.resetsAt, "when both windows are exhausted the later reset controls availability");
             week.resetsAt = null;
-            Check(!RingValue.From(provider, 300, now, true).ResetsAt.HasValue, "an unknown weekly reset does not promise availability at the 5-hour reset");
+            Check(!RingValue.Rings(provider, now, true).Outer.ResetsAt.HasValue, "an unknown weekly reset does not promise availability at the 5-hour reset");
             Lang.Apply("en");
-            try { Check(RingValue.From(provider, 300, now, true).Detail.Contains("Weekly quota exhausted"), "the weekly restriction explanation is translated into English"); }
+            try { Check(RingValue.Rings(provider, now, true).Outer.Detail.Contains("Weekly quota exhausted"), "the weekly restriction explanation is translated into English"); }
             finally { Lang.Apply("zh"); }
         }
         // The work area of the monitor a window is on, in physical pixels.
@@ -235,15 +264,15 @@ namespace AgentHud.Tests
             var provider = ProviderAt(RingValue.Now());
             Field("snapshot").SetValue(hud, new Snapshot { providers = new List<Provider> { provider }, collectedAt = RingValue.Now() });
             Field("online").SetValue(hud, true);
-            Call(hud, "SetPeriod", 300);
+            Call(hud, "RenderData");
             var ring = (QuotaRing)Field("codex").GetValue(hud);
-            Check(ring.Percent == 80, "visible widget consumes latest snapshot");
+            Check(ring.Percent == 80 && ring.InnerPercent == 65 && ring.Primary == "65%", "visible widget consumes latest snapshot: 5 hours outside, 7 days inside, the lower in the middle");
             hud.Hide(); Pump();
-            Call(hud, "SetPeriod", 10080);
+            provider.limits.windows[0].remainingPercent = 30;
             Call(hud, "RenderData");
             Check(ring.Percent == 80 && !ring.HasAnimatedProperties, "hidden widget skips rendering and stops animation");
             hud.Show(); Pump();
-            Check(ring.Percent == 65, "restored widget immediately renders the latest selected quota");
+            Check(ring.Percent == 30 && ring.Primary == "30%", "restored widget immediately renders the latest quota");
             timer.Start();
         }
     }

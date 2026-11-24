@@ -52,7 +52,7 @@ namespace AgentHud.Tests
             var inside = true;
             var ring = (QuotaRing)typeof(HudWindow).GetField("codex", Flags).GetValue(hud);
             var diameter = ring.ActualWidth;
-            var controls = new[] { "codexPet", "codex", "claudePet", "claude", "langButton", "pinButton", "periodButton", "moreButton" }
+            var controls = new[] { "codexPet", "codex", "claudePet", "claude", "langButton", "pinButton", "moreButton" }
                 .Select(name => (FrameworkElement)typeof(HudWindow).GetField(name, Flags).GetValue(hud)).ToArray();
             EventHandler sample = delegate
             {

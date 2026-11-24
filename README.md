@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/widget-hover-en.png" width="640" alt="Desktop widget: a pet and a quota ring for Codex and for Claude, with the remaining percentage and reset time inside each ring; hovering Claude shows its card with both quota windows, what its agents are doing, today's usage and the latest model">
+  <img src="docs/images/widget-hover-en.png" width="640" alt="Desktop widget: a pet and nested quota rings for Codex and for Claude, the 5-hour window outside and the 7-day window inside, with the lower remaining percentage and its reset time in the middle; hovering Claude shows its card with every quota window marked by its ring, what its agents are doing, today's usage and the latest model">
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
 
 ## Highlights
 
-- 🪟 **Desktop widget** — a frosted-glass strip with a brand-colored ring per platform (remaining percentage and reset time inside) and a pet that works, rests and falls asleep with its agents; hover for details, and drop it on a side of the screen for a column.
+- 🪟 **Desktop widget** — an acrylic-style glass strip with brand-colored nested rings per platform (5-hour outside, 7-day inside, whichever has less left in the middle with its reset time) and a pet that works, rests and falls asleep with its agents; hover for details, and drop it on a side of the screen for a column.
 - 📊 **Dashboard** — account quotas, token usage, cache hit rate, a seven-day chart, usage by model, thinking effort or project, and every agent session, in light or dark.
 - 🔒 **Local only** — reads your own Codex / Claude Code logs, binds to 127.0.0.1, never stores prompts or credentials.
 - 📌 **Stays out of the way** — one-click pin, snaps to screen edges, restarts its own service if it stops.
@@ -72,11 +72,11 @@ Reference: [Codex App Server documentation](https://learn.chatgpt.com/docs/app-s
 
 ## Windows desktop widget
 
-<img src="docs/images/widget-docked-en.png" width="200" align="right" alt="The widget docked against the left edge of the screen as a column: Codex's pet and ring, Claude's pet and ring, then the language, pin, period and menu buttons">
+<img src="docs/images/widget-docked-en.png" width="200" align="right" alt="The widget docked against the left edge of the screen as a column: Codex's pet and rings, Claude's pet and rings, then the language, pin and menu buttons">
 
 The widget runs `desktop/bin/AgentHUD.exe` directly and brings the local quota service back on its own. Earlier versions launched through `Agent HUD.vbs` and `start-widget.ps1`, which antivirus software (Norton) quarantined, so the entry point no longer depends on scripts. On the first run of a freshly built exe, some antivirus products hold it for tens of seconds while scanning.
 
-The widget is a 282 × 52 DIP frosted-glass strip: it blurs whatever is behind it live, uses Windows 11's native rounded corners, scales with Windows display scaling, and follows the Windows app light/dark theme (matching the dashboard). With Windows transparency effects off it switches to an opaque background. Each platform gets a tile: its pet and a ring in the brand's colors (Codex's blue-violet gradient, Claude's clay orange), with the remaining percentage inside the ring (red below 20%) and the reset time under it.
+The widget is a 246 × 52 DIP glass strip in the style of Windows 11's acrylic. It blurs whatever is behind it live, then adds a light tint, a fine grain, a soft gloss across the top, a bright highlight along the top edge and a faint darker outline. Windows' own acrylic backdrop isn't used, because Windows only draws it on the focused window and the widget never takes focus; the blur works either way. It uses Windows 11's native rounded corners, scales with Windows display scaling, and follows the Windows app light/dark theme (matching the dashboard). With Windows transparency effects off it switches to an opaque background without the grain. Each platform gets a tile: its pet and its rings in the brand's colors (Codex's blue-violet gradient, Claude's clay orange).
 
 Each platform has a pet, and its pose says what that platform's agents are doing. Codex's is a blue-violet cloud with a `>_` mouth; Claude's is an orange blob with a sparkle on a sprout.
 - **Working:** it hops while an agent is working, meaning a session wrote to its log in the last two minutes and hasn't finished its turn. Claude's sparkle spins and Codex's cursor blinks.
@@ -88,16 +88,16 @@ Each platform has a pet, and its pose says what that platform's agents are doing
 Animations pause while the widget is hidden and follow Windows' *Animation effects* setting.
 
 Hover a pet or ring for that platform's card:
-- every quota window it reports, with the one in the ring marked, each with its bar, reset countdown and date;
+- every quota window it reports, each marked with the ring it's drawn as (outer or inner) and shown with its bar, reset countdown and date;
 - what its agents are doing and how many sessions are active;
 - today's tokens and requests, and the latest model and thinking effort;
 - where the quota came from and how fresh it is.
 
-Drag empty space to move it. On release it snaps to the edge of the screen's work area when close. Dropped against the left or right edge, it turns into a 58 × 290 DIP column, pets above rings and buttons below, and its cards and menu open toward the screen; dragged away from the edge, it becomes a strip again. It remembers the monitor, relative position and layout. Restored positions avoid the taskbar and gaps between monitors, are corrected after display or scaling changes, and fall back to the primary screen if the original one is gone. Both the ⋯ menu and the tray menu offer *Reset widget position*.
+Drag empty space to move it. On release it snaps to the edge of the screen's work area when close. Dropped against the left or right edge, it turns into a 58 × 260 DIP column, pets above rings and buttons below, and its cards and menu open toward the screen; dragged away from the edge, it becomes a strip again. It remembers the monitor, relative position and layout. Restored positions avoid the taskbar and gaps between monitors, are corrected after display or scaling changes, and fall back to the primary screen if the original one is gone. Both the ⋯ menu and the tray menu offer *Reset widget position*.
 
-`5h` / `7d` switches the quota window shown in the rings. Under each percentage is the quota's reset time: the clock time within a day ("14:30"), the weekday within the coming week ("Thu"), otherwise the date ("11/24"). If the account has no window of the selected length, such as ChatGPT's free plan, which reports a single 30-day window, the ring shows the window the account does have and the card says so. Under the number the ring reads "Offline" when the local service is offline, and "left" when the platform gives no reset time. Local snapshots are read every 5 seconds; Codex's official quota is normally queried about once a minute and Claude's desktop quota about every 5 minutes, and both may lag when connections fail. An unknown time is never shown as "just now".
+Each platform's outer ring is its 5-hour window, and the thinner ring inside it is the account-wide 7-day window; model-specific windows, such as Claude's Opus week, are listed in the card. The middle shows whichever has less left, since that one runs out first (red below 20%). Under it is that window's reset time: the clock time within a day ("14:30"), the weekday within the coming week ("Thu"), otherwise the date ("11/24"). A plan with a single window, such as ChatGPT's free plan with its 30-day window, gets a single ring. Under the number the ring reads "Offline" when the local service is offline, and "left" when the platform gives no reset time. Local snapshots are read every 5 seconds; Codex's official quota is normally queried about once a minute and Claude's desktop quota about every 5 minutes, and both may lag when connections fail. An unknown time is never shown as "just now".
 
-A solid blue pin means always-on-top; a hollow pin with a slash means not pinned. Click the pin once to pin, again to unpin. The ⋯ to the right of `5h` / `7d` opens the menu: toggle always-on-top, open the dashboard or the Codex / Claude usage pages, hide to the tray, reset the position, or quit.
+A solid blue pin means always-on-top; a hollow pin with a slash means not pinned. Click the pin once to pin, again to unpin. The ⋯ at the end of the strip opens the menu: toggle always-on-top, open the dashboard or the Codex / Claude usage pages, hide to the tray, reset the position, or quit.
 
 The widget comes in English and Chinese. By default it follows the Windows display language; the **EN** / **中** button left of the pin (or *Switch to English* / *切换到中文* in the tray menu) changes it on the spot, and the choice is saved. Status text that the local service sends (quota sources, connection messages) is translated too.
 
