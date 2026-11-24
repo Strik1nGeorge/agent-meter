@@ -256,9 +256,43 @@ namespace AgentHud
             {
                 DependencyObject node = e.OriginalSource as DependencyObject;
                 while (node != null && node != capsule) { if (node is Button) return; node = VisualTreeHelper.GetParent(node); }
-                if (e.ButtonState == MouseButtonState.Pressed) { try { placement.CompleteReanchor(); DragMove(); placement.EnsureVisible(true); SaveState(); CheckDock(); } catch (InvalidOperationException) { } }
+                if (e.ButtonState != MouseButtonState.Pressed) return;
+                var ring = RingUnder(e.GetPosition(capsule));
+                try
+                {
+                    placement.CompleteReanchor();
+                    double left = Left, top = Top;
+                    DragMove();
+                    // Pressed on a ring and let go within the system's drag distance: a click, which switches the
+                    // middles. The widget goes back to where it was, so a slight wobble doesn't nudge it.
+                    if (ring != null && Math.Abs(Left - left) <= SystemParameters.MinimumHorizontalDragDistance && Math.Abs(Top - top) <= SystemParameters.MinimumVerticalDragDistance)
+                    {
+                        if (Left != left || Top != top) { Left = left; Top = top; }
+                        ToggleCenter(); return;
+                    }
+                    placement.EnsureVisible(true); SaveState(); CheckDock();
+                }
+                catch (InvalidOperationException) { }
             };
             return capsule;
+        }
+        // The ring whose circle contains this point of the capsule, if any.
+        QuotaRing RingUnder(Point point)
+        {
+            foreach (var ring in new[] { codex, claude })
+            {
+                if (!ring.IsVisible) continue;
+                var local = capsule.TranslatePoint(point, ring);
+                var dx = local.X - ring.ActualWidth / 2; var dy = local.Y - ring.ActualHeight / 2;
+                if (dx * dx + dy * dy <= QuotaRing.Diameter * QuotaRing.Diameter / 4) return ring;
+            }
+            return null;
+        }
+        // The middle of every ring shows the 5-hour window or the 7-day one; a click on any ring switches all of them.
+        void ToggleCenter()
+        {
+            saved.center = saved.center == "inner" ? "outer" : "inner";
+            SaveState(); RenderData();
         }
 
         // Pet and ring for one platform; hovering either shows the platform's card.
@@ -500,11 +534,15 @@ namespace AgentHud
             if (!IsVisible || exiting) return;
             var now = RingValue.Now();
             var cp = ProviderFor("codex"); var ap = ProviderFor("claude");
-            var c = RingValue.Rings(cp, now, online);
-            var a = RingValue.Rings(ap, now, online);
+            var showInner = saved.center == "inner";
+            var c = RingValue.Rings(cp, now, online, showInner);
+            var a = RingValue.Rings(ap, now, online, showInner);
             codex.Update(c, !online); claude.Update(a, !online);
-            // The pets go by the number in the middle: the window that runs out first.
-            codexPet.SetMood(AgentPet.MoodFor(cp, c.Center, online, now)); claudePet.SetMood(AgentPet.MoodFor(ap, a.Center, online, now));
+            // A hand over the rings once a click has something to switch.
+            var switchable = c.Inner != null || a.Inner != null;
+            foreach (var ring in new[] { codex, claude }) ring.Cursor = switchable ? Cursors.Hand : null;
+            // The pets go by whichever window is closer to running out, whatever the middle shows.
+            codexPet.SetMood(AgentPet.MoodFor(cp, c.Lowest, online, now)); claudePet.SetMood(AgentPet.MoodFor(ap, a.Lowest, online, now));
             RefreshCard(true, false); RefreshCard(false, false);
             var scanStale = snapshot != null && (!snapshot.collectedAt.HasValue || now - snapshot.collectedAt.Value > 30000);
             // Offline: orange edge *and* the word "离线" under each ring — colour is never the only signal.
@@ -517,7 +555,7 @@ namespace AgentHud
                     : snapshot.loading ? Lang.T("正在读取额度", "Reading quotas")
                     : scanStale ? Lang.T("会话扫描延迟，额度不受影响", "Session scan delayed; quotas are unaffected")
                     : Lang.T("每 5 秒读取本地快照；平台额度按各自频率更新", "Reads the local snapshot every 5 s; each platform's quota updates on its own schedule"))
-                + (c.Inner != null || a.Inner != null ? Lang.T("\n外圈 5 小时、内圈 7 天，中间显示剩余较少的那个", "\nOuter ring 5-hour, inner ring 7-day; the middle shows whichever has less left") : "")
+                + (switchable ? Lang.T("\n外圈 5 小时、内圈 7 天；点击圆环切换中间显示哪一个", "\nOuter ring 5-hour, inner ring 7-day; click a ring to switch which one the middle shows") : "")
                 + Lang.T("\n悬停宠物或圆环查看该 agent 的详情", "\nHover a pet or ring for that agent's details");
             if (!Equals(capsule.ToolTip, detail)) capsule.ToolTip = detail;
         }

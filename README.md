@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/widget-hover-en.png" width="640" alt="Desktop widget: a pet and nested quota rings for Codex and for Claude, the 5-hour window outside and the 7-day window inside, with the lower remaining percentage and its reset time in the middle; hovering Claude shows its card with every quota window marked by its ring, what its agents are doing, today's usage and the latest model">
+  <img src="docs/images/widget-hover-en.png" width="640" alt="Desktop widget: a pet and nested quota rings for Codex and for Claude, the 5-hour window outside and the 7-day window inside, with the 5-hour percentage and reset time in the middle; hovering Claude shows its card with every quota window marked by its ring, what its agents are doing, today's usage and the latest model">
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
 
 ## Highlights
 
-- 🪟 **Desktop widget** — an acrylic-style glass strip with brand-colored nested rings per platform (5-hour outside, 7-day inside, whichever has less left in the middle with its reset time) and a pet that works, rests and falls asleep with its agents; hover for details, and drop it on a side of the screen for a column.
+- 🪟 **Desktop widget** — an acrylic-style glass strip with brand-colored nested rings per platform (5-hour outside, 7-day inside; the middle shows the 5-hour number and reset time, or the 7-day one at a click) and a pet that works, rests and falls asleep with its agents; hover for details, and drop it on a side of the screen for a column.
 - 📊 **Dashboard** — account quotas, token usage, cache hit rate, a seven-day chart, usage by model, thinking effort or project, and every agent session, in light or dark.
 - 🔒 **Local only** — reads your own Codex / Claude Code logs, binds to 127.0.0.1, never stores prompts or credentials.
 - 📌 **Stays out of the way** — one-click pin, snaps to screen edges, restarts its own service if it stops.
@@ -81,7 +81,7 @@ The widget is a 246 × 52 DIP glass strip in the style of Windows 11's acrylic. 
 Each platform has a pet, and its pose says what that platform's agents are doing. Codex's is a blue-violet cloud with a `>_` mouth; Claude's is an orange blob with a sparkle on a sprout.
 - **Working:** it hops while an agent is working, meaning a session wrote to its log in the last two minutes and hasn't finished its turn. Claude's sparkle spins and Codex's cursor blinks.
 - **Idle:** it breathes and blinks.
-- **Low:** under 20% left it gets sleepy and sweats.
+- **Low:** when either ring is under 20% it gets sleepy and sweats.
 - **Out of quota:** when any quota window is used up, it melts flat and falls asleep with drifting "z z Z".
 - **Offline:** when the local service is offline, it greys out.
 
@@ -95,7 +95,7 @@ Hover a pet or ring for that platform's card:
 
 Drag empty space to move it. On release it snaps to the edge of the screen's work area when close. Dropped against the left or right edge, it turns into a 58 × 260 DIP column, pets above rings and buttons below, and its cards and menu open toward the screen; dragged away from the edge, it becomes a strip again. It remembers the monitor, relative position and layout. Restored positions avoid the taskbar and gaps between monitors, are corrected after display or scaling changes, and fall back to the primary screen if the original one is gone. Both the ⋯ menu and the tray menu offer *Reset widget position*.
 
-Each platform's outer ring is its 5-hour window, and the thinner ring inside it is the account-wide 7-day window; model-specific windows, such as Claude's Opus week, are listed in the card. The middle shows whichever has less left, since that one runs out first (red below 20%). Under it is that window's reset time: the clock time within a day ("14:30"), the weekday within the coming week ("Thu"), otherwise the date ("11/24"). A plan with a single window, such as ChatGPT's free plan with its 30-day window, gets a single ring. Under the number the ring reads "Offline" when the local service is offline, and "left" when the platform gives no reset time. Local snapshots are read every 5 seconds; Codex's official quota is normally queried about once a minute and Claude's desktop quota about every 5 minutes, and both may lag when connections fail. An unknown time is never shown as "just now".
+Each platform's outer ring is its 5-hour window, and the thinner ring inside it is the account-wide 7-day window; model-specific windows, such as Claude's Opus week, are listed in the card. The middle shows the 5-hour window's remaining percentage (red below 20%) with its reset time under it. Click either ring to switch every ring's middle to the 7-day window, and again to switch back; the choice is remembered, and the ring whose number is in the middle is drawn at full strength. Reset times read as the clock time within a day ("14:30"), the weekday within the coming week ("Thu"), otherwise the date ("11/24"). A plan with a single window, such as ChatGPT's free plan with its 30-day window, gets a single ring. Under the number the ring reads "Offline" when the local service is offline, and "left" when the platform gives no reset time. Local snapshots are read every 5 seconds; Codex's official quota is normally queried about once a minute and Claude's desktop quota about every 5 minutes, and both may lag when connections fail. An unknown time is never shown as "just now".
 
 A solid blue pin means always-on-top; a hollow pin with a slash means not pinned. Click the pin once to pin, again to unpin. The ⋯ at the end of the strip opens the menu: toggle always-on-top, open the dashboard or the Codex / Claude usage pages, hide to the tray, reset the position, or quit.
 

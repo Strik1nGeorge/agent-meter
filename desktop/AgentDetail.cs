@@ -55,6 +55,12 @@ namespace AgentHud
                         : window == outer ? Lang.T(" · 外圈", " · outer ring") : window == inner ? Lang.T(" · 内圈", " · inner ring") : "";
                     card.Children.Add(WindowRow(window, role, codex, now, RingValue.WeeklyBlocker(limits, window, now)));
                 }
+                if (inner != null)
+                {
+                    var hint = Text(Lang.T("点击圆环可切换中间显示的额度", "Click a ring to switch the middle number"), 10.5, FontWeights.Normal, true);
+                    hint.Margin = new Thickness(0, -2, 0, 2);
+                    card.Children.Add(hint);
+                }
             }
             else
             {

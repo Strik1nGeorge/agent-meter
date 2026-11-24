@@ -62,16 +62,20 @@ namespace AgentHud
         public string language { get; set; }
         // "left" / "right" when docked to that side of the screen (vertical layout); null otherwise.
         public string dock { get; set; }
-        public WidgetState() { pinned = true; language = "auto"; }
+        // What the middle of the rings shows: "outer" (the 5-hour window) or "inner" (7 days). A click on a ring switches it.
+        public string center { get; set; }
+        public WidgetState() { pinned = true; language = "auto"; center = "outer"; }
     }
     // One platform's rings. The outer ring is its shortest window (5 hours on most plans); the thinner inner
     // ring is the account-wide window after it (7 days), when the plan has one. The middle of the ring shows
-    // whichever has less left, since that is the one that runs out first.
+    // the outer window's number and reset, or the inner one's once the user switches to it.
     public class RingSet
     {
         public RingValue Outer, Inner;
         public bool CenterInner;
         public RingValue Center { get { return CenterInner ? Inner : Outer; } }
+        // The window closer to running out, which sets the pet's mood: a number beats a status word, then the lower number.
+        public RingValue Lowest { get { return Inner != null && Inner.Percent.HasValue && (!Outer.Percent.HasValue || Inner.Percent.Value < Outer.Percent.Value) ? Inner : Outer; } }
     }
     public static class RingStatus
     {
@@ -93,14 +97,14 @@ namespace AgentHud
         static readonly string[] WeekDaysZh = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
         static readonly string[] WeekDaysEn = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 
-        public static RingSet Rings(Provider provider, double now, bool online)
+        // showInner: the middle shows the inner window instead of the outer one (plans with a single window ignore it).
+        public static RingSet Rings(Provider provider, double now, bool online, bool showInner = false)
         {
             var windows = provider == null || provider.limits == null ? null : provider.limits.windows;
             var outer = OuterWindow(windows);
             var inner = InnerWindow(windows, outer);
             var set = new RingSet { Outer = ForWindow(provider, outer, now, online), Inner = inner == null ? null : ForWindow(provider, inner, now, online) };
-            // A number beats a status word in the middle; between two numbers the lower one goes there.
-            set.CenterInner = set.Inner != null && set.Inner.Percent.HasValue && (!set.Outer.Percent.HasValue || set.Inner.Percent.Value < set.Outer.Percent.Value);
+            set.CenterInner = showInner && set.Inner != null;
             return set;
         }
 

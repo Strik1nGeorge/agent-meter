@@ -9,7 +9,8 @@ namespace AgentHud
 {
     // Remaining quota in the platform's own colours. The outer ring is the platform's shortest window
     // (5 hours on most plans); a longer account-wide window (7 days) is a thinner ring inside it. The middle
-    // shows whichever has less left, with its reset time under it. The pet beside the ring names the platform.
+    // shows one of them, the outer by default, with its reset time under it, and that ring is drawn at full
+    // strength. The pet beside the ring names the platform.
     public class QuotaRing : FrameworkElement
     {
         // Animated stand-ins for the two percentages, so the arcs move to new values instead of jumping.
@@ -33,6 +34,8 @@ namespace AgentHud
         public bool Stale { get; private set; }
         public bool HasInner { get; private set; }
         public double? InnerPercent { get; private set; }
+        // Whether the middle shows the inner ring's window.
+        public bool CenterInner { get; private set; }
         bool innerStale, centerStale;
         double? centerPercent;
         public string Platform { get; set; }
@@ -69,12 +72,13 @@ namespace AgentHud
             var innerValue = set.Inner;
             var center = set.Center ?? outerValue;
             var innerPercent = innerValue == null ? null : innerValue.Percent;
+            var innerCenter = set.CenterInner && innerValue != null;
             var changed = Percent != outerValue.Percent;
             var innerChanged = HasInner != (innerValue != null) || InnerPercent != innerPercent;
-            var styleChanged = Stale != outerValue.Stale || innerStale != (innerValue != null && innerValue.Stale) || centerStale != center.Stale || centerPercent != center.Percent;
+            var styleChanged = Stale != outerValue.Stale || innerStale != (innerValue != null && innerValue.Stale) || centerStale != center.Stale || centerPercent != center.Percent || CenterInner != innerCenter;
             Percent = outerValue.Percent; Stale = outerValue.Stale;
             HasInner = innerValue != null; InnerPercent = innerPercent; innerStale = innerValue != null && innerValue.Stale;
-            centerPercent = center.Percent; centerStale = center.Stale;
+            CenterInner = innerCenter; centerPercent = center.Percent; centerStale = center.Stale;
             string primary, secondary;
             if (center.Percent.HasValue)
             {
@@ -126,9 +130,9 @@ namespace AgentHud
             base.OnRender(dc);
             const double half = Diameter / 2;
             var middle = new Point(half, half);
-            DrawRing(dc, outer, middle, OuterRadius, OuterThickness, Percent, Stale, Display, 1);
-            // The inner ring sits a step back, so the two read as one gauge with a secondary scale.
-            if (HasInner) DrawRing(dc, inner, middle, InnerRadius, InnerThickness, InnerPercent, innerStale, DisplayInner, 0.8);
+            // The ring whose number is in the middle is drawn at full strength, the other a step back.
+            DrawRing(dc, outer, middle, OuterRadius, OuterThickness, Percent, Stale, Display, CenterInner ? 0.7 : 1);
+            if (HasInner) DrawRing(dc, inner, middle, InnerRadius, InnerThickness, InnerPercent, innerStale, DisplayInner, CenterInner ? 1 : 0.7);
 
             if (TextBrush == null || Primary == null) return;
             // Inside the inner ring everything is a size smaller, to stay clear of it.
