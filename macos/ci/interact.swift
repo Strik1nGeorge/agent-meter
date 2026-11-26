@@ -1,27 +1,33 @@
 // CI only: drives the running widget with synthetic mouse events and screenshots each step, so the macOS job
 // can check hovering, clicking a ring and docking against the screen edge on a real Mac.
-// Usage: swift macos/ci/interact.swift <output folder>
+// Usage: swift macos/ci/interact.swift <output folder> <widget process id>
 import AppKit
 import CoreGraphics
 
 let folder = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
+let pid = CommandLine.arguments.count > 2 ? Int(CommandLine.arguments[2]) ?? -1 : -1
 
-func widgetBounds() -> CGRect? {
-    guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return nil }
-    for window in windows where (window[kCGWindowOwnerName as String] as? String) == "AgentMeter" {
-        guard let bounds = window[kCGWindowBounds as String] as? [String: CGFloat], let width = bounds["Width"], let height = bounds["Height"] else { continue }
-        // The widget itself, not a hover card or tip.
-        if (abs(width - 246) < 2 && abs(height - 52) < 2) || (abs(width - 58) < 2 && abs(height - 260) < 2) {
-            return CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: width, height: height)
-        }
+// The widget's windows, by process (a bundled app's windows are listed under its display name).
+func ownWindows() -> [(CGRect, Int)] {
+    guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return [] }
+    return list.compactMap { window -> (CGRect, Int)? in
+        let owner = window[kCGWindowOwnerPID as String] as? Int ?? -2
+        let name = window[kCGWindowOwnerName as String] as? String ?? ""
+        guard owner == pid || name == "Agent Meter" || name == "AgentMeter",
+              let dictionary = window[kCGWindowBounds as String] as? NSDictionary,
+              let bounds = CGRect(dictionaryRepresentation: dictionary as CFDictionary) else { return nil }
+        return (bounds, window[kCGWindowLayer as String] as? Int ?? 0)
     }
-    return nil
+}
+
+// The widget itself, not a hover card or tip.
+func widgetBounds() -> CGRect? {
+    ownWindows().map(\.0).first { (abs($0.width - 246) < 2 && abs($0.height - 52) < 2) || (abs($0.width - 58) < 2 && abs($0.height - 260) < 2) }
 }
 
 func windows() -> String {
-    guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return "none" }
-    return list.filter { ($0[kCGWindowOwnerName as String] as? String) == "AgentMeter" }
-        .map { "\($0[kCGWindowBounds as String] ?? "?")" }.joined(separator: " | ")
+    let own = ownWindows()
+    return own.isEmpty ? "none" : own.map { "\($0.0) layer \($0.1)" }.joined(separator: " | ")
 }
 
 func post(_ type: CGEventType, _ point: CGPoint) {
