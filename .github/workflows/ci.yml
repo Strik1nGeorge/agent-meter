@@ -66,6 +66,31 @@ jobs:
           sleep 6
           ps -p "$app" -o pid=,stat=,command= | tee real/process.log || echo "app exited" | tee real/process.log
           swift macos/ci/interact.swift real "$app" 2>&1 | tee real/interact.log
+      - name: Service start
+        id: service
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          mkdir -p real
+          pkill -x AgentMeter || true
+          sleep 1
+          # Opened the way Finder opens it, the app gets launchd's minimal PATH, finds no service on the
+          # default port and has to bring it up itself through start.sh.
+          open "macos/bin/Agent Meter.app"
+          ok=0
+          for i in $(seq 1 60); do if curl -fs http://127.0.0.1:4318/api/health > /dev/null; then ok=1; break; fi; sleep 1; done
+          {
+            echo "healthy after ${i}s: $ok"
+            curl -fs http://127.0.0.1:4318/api/health || true
+            echo
+            if [ -f .data/server.pid ]; then ps -o command= -p "$(cat .data/server.pid)" || true; fi
+          } > real/service.log 2>&1
+          cat real/service.log
+          cp .data/server-error.log real/service-error.log 2>/dev/null || true
+          sleep 6
+          screencapture -x real/real-7-service.png
+          sh stop.sh || true
+          pkill -x AgentMeter || true
+          [ "$ok" = 1 ]
       - name: Publish report
         if: ${{ always() && github.event_name == 'push' }}
         env:
@@ -80,6 +105,7 @@ jobs:
             echo "test: ${{ steps.test.outcome }}"
             echo "previews: ${{ steps.previews.outcome }}"
             echo "real: ${{ steps.real.outcome }}"
+            echo "service: ${{ steps.service.outcome }}"
           } > "$out/report.txt"
           cp toolchain.log build.log test.log previews.log "$out/" 2>/dev/null || true
           cp previews/*.png real/*.png real/*.log "$out/" 2>/dev/null || true
