@@ -153,7 +153,7 @@ Works with the standalone and Microsoft Store Claude data folders on Windows, in
 On a Mac it reads the same cache from `~/Library/Application Support/Claude`. A `Claude-Data` folder there is checked first, in case newer versions move it as they did on Windows. Claude encrypts the cache with a key it keeps in your login Keychain as *Claude Safe Storage*, and the service reads that key with Apple's `security` tool. The first time, macOS asks whether `security` may use it:
 - *Allow* answers for this run. The service keeps the key in memory only, so macOS asks again the next time the service starts.
 - *Always Allow* stops the question, but from then on any program running under your account can read that key through `security` without being asked.
-- *Deny* leaves the connection without a quota.
+- *Deny* leaves Claude's quota out and isn't asked again until the service restarts.
 
 The Mac path is covered by tests with synthetic data but hasn't been tried with a real Claude install yet.
 

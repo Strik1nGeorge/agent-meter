@@ -270,6 +270,7 @@ const SERVER_TEXT = {
   'Claude 桌面版尚未提供账户连接，请打开 Code 标签页并确认已登录。': "Claude desktop hasn't provided an account connection yet. Open its Code tab and make sure you're signed in.",
   'Claude 桌面版登录连接已过期，请打开 Claude，让它自动续期。': 'The Claude desktop sign-in has expired. Open Claude so it can renew it.',
   '暂时无法读取 Claude 的加密账户连接，将稍后重试。': "Can't read Claude's encrypted account connection right now; will retry later.",
+  '已拒绝读取钥匙串中 Claude 的密钥；重启服务后会再次询问。': "Keychain access to Claude's key was denied. Restart the service to be asked again.",
   '当前 Claude 版本的账户存储格式尚未支持。': "This Claude version's account storage format isn't supported yet.",
   '发现多个 Claude 组织的有效连接，无法确定当前额度所属组织。': "Found connections for several Claude organizations; can't tell which one the quota belongs to.",
   'Claude 账户连接已失效，请在 Claude 桌面版中重新登录。': 'The Claude account connection is no longer valid. Sign in again in Claude desktop.',

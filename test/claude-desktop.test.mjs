@@ -143,6 +143,21 @@ test('On a Mac the desktop cache uses Chromium encryption with the Keychain pass
   await assert.rejects(readMacCredential({ directories, password: async () => { throw new ClaudeConnectionError('not-found'); }, forget }), error => error.code === 'not-found');
   await assert.rejects(readMacCredential({ directories: async () => [path.join(root, 'missing')], password: async () => password, forget }), error => error.code === 'not-found');
   assert.equal(forgotten, 1);
+  // One Keychain key serves every folder: a refusal is asked about once, not once per folder.
+  let asked = 0;
+  const twice = async () => [path.join(root, 'Claude'), path.join(root, 'Claude')];
+  await assert.rejects(readMacCredential({ directories: twice, password: async () => { asked++; throw new ClaudeConnectionError('denied'); }, forget }), error => error.code === 'denied');
+  assert.equal(asked, 1);
+});
+
+test('Desktop refused Keychain access is not asked about again until the service restarts', async () => {
+  let now = time, reads = 0;
+  const quota = new ClaudeDesktopQuota({ now: () => now, credential: async () => { reads++; throw new ClaudeConnectionError('denied'); }, fetchImpl: async () => { throw new Error('no request expected'); } });
+  await quota.refresh();
+  assert.equal(quota.status, 'denied'); assert.equal(quota.snapshot, null);
+  assert.match(quota.error, /重启服务/);
+  now += 24 * 3600000; await quota.refresh();
+  assert.equal(reads, 1);
 });
 
 test('On a Mac the Keychain password is read once per run, and read again after failing or being forgotten', async () => {

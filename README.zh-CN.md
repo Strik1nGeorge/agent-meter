@@ -153,7 +153,7 @@ Mac 版小组件是 `macos/` 目录下的原生应用（Swift，基于 AppKit �
 在 Mac 上，它从 `~/Library/Application Support/Claude` 读取同样的缓存（会先检查其中的 `Claude-Data` 目录，以防新版像在 Windows 上那样迁移）。Claude 用保存在登录钥匙串中、名为“Claude Safe Storage”的密钥加密这份缓存，服务通过 Apple 自带的 `security` 工具读取该密钥。第一次读取时，macOS 会询问是否允许 `security` 使用它：
 - “允许”只对本次运行有效。服务仅在内存中保存该密钥，下次服务启动时 macOS 会再次询问。
 - “始终允许”以后不再询问，但此后在你账户下运行的任何程序都能通过 `security` 直接读取该密钥，不会有提示。
-- “拒绝”则不连接，也不显示额度。
+- “拒绝”则不显示 Claude 额度，并且在服务重启前不再询问。
 
 Mac 上的读取逻辑已用合成数据测试，但尚未在真实安装的 Claude 上验证。
 
