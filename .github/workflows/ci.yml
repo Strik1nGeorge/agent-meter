@@ -73,9 +73,18 @@ jobs:
           mkdir -p real
           pkill -x AgentMeter || true
           sleep 1
-          # Opened the way Finder opens it, the app gets launchd's minimal PATH, finds no service on the
-          # default port and has to bring it up itself through start.sh.
-          open "macos/bin/Agent Meter.app"
+          # Like a Mac whose Node.js comes from a version manager, only the login shell's profile puts it on
+          # the PATH (a Homebrew or MacPorts copy, if the runner has one, is found before that).
+          node_dir=$(dirname "$(command -v node)")
+          for profile in ~/.zprofile ~/.bash_profile; do echo "export PATH=\"$node_dir:\$PATH\"" >> "$profile"; done
+          {
+            echo "SHELL=${SHELL:-unset}"
+            ls -l /opt/homebrew/bin/node /usr/local/bin/node /opt/local/bin/node 2>&1 || true
+          } > real/service.log
+          # Opened with the environment Finder gives apps (launchd's minimal PATH; `open` passes on its own
+          # environment otherwise), the app finds no service on the default port and has to bring it up
+          # itself through start.sh.
+          env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL="${SHELL:-/bin/zsh}" TMPDIR="$TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin open "macos/bin/Agent Meter.app"
           ok=0
           for i in $(seq 1 60); do if curl -fs http://127.0.0.1:4318/api/health > /dev/null; then ok=1; break; fi; sleep 1; done
           {
@@ -83,7 +92,7 @@ jobs:
             curl -fs http://127.0.0.1:4318/api/health || true
             echo
             if [ -f .data/server.pid ]; then ps -o command= -p "$(cat .data/server.pid)" || true; fi
-          } > real/service.log 2>&1
+          } >> real/service.log 2>&1
           cat real/service.log
           cp .data/server-error.log real/service-error.log 2>/dev/null || true
           sleep 6
