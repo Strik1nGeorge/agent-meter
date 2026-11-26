@@ -8,6 +8,7 @@ import { CodexQuota } from './lib/codex-rpc.mjs';
 import { ClaudeDesktopQuota } from './lib/claude-desktop.mjs';
 import { providerActivity } from './lib/activity.mjs';
 import { QuotaHistory } from './lib/quota-history.mjs';
+import { claudeSetupCommand } from './lib/setup.mjs';
 
 // Match desktop applications' Windows trust store without weakening HTTPS validation.
 if (process.platform === 'win32' && typeof tls.getCACertificates === 'function' && typeof tls.setDefaultCACertificates === 'function') {
@@ -94,7 +95,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/setup') {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ claudeCommand: `& '${process.execPath.replaceAll("'", "''")}' '${path.join(root, 'scripts', 'connect-claude.mjs').replaceAll("'", "''")}'` })); return;
+      res.end(JSON.stringify({ claudeCommand: claudeSetupCommand(process.platform, process.execPath, path.join(root, 'scripts', 'connect-claude.mjs')) })); return;
     }
     const asset = assets[url.pathname];
     if (!asset) { res.writeHead(404); res.end('Not found'); return; }

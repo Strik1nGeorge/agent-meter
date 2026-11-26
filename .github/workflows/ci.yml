@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main, macos]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  node:
+    name: Node tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  macos-app:
+    name: macOS app
+    runs-on: macos-latest
+    permissions:
+      contents: write   # publishes the build report and preview images to the macos-previews branch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Toolchain
+        run: |
+          sw_vers | tee toolchain.log
+          swift --version 2>&1 | tee -a toolchain.log
+      - name: Build
+        id: build
+        run: sh macos/build.sh 2>&1 | tee build.log
+      - name: Test
+        id: test
+        if: ${{ !cancelled() }}
+        run: swift test --package-path macos 2>&1 | tee test.log
+      - name: Previews
+        id: previews
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          node scripts/demo-server.mjs . 4400 > demo-server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:4400/api/quotas > /dev/null && break; sleep 0.5; done
+          "macos/bin/Agent Meter.app/Contents/MacOS/AgentMeter" --preview previews --url http://127.0.0.1:4400 2>&1 | tee previews.log
+      - name: Publish report
+        if: ${{ always() && github.event_name == 'push' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          out="$RUNNER_TEMP/report"
+          mkdir -p "$out"
+          {
+            echo "commit: $GITHUB_SHA"
+            echo "ref: $GITHUB_REF_NAME"
+            echo "build: ${{ steps.build.outcome }}"
+            echo "test: ${{ steps.test.outcome }}"
+            echo "previews: ${{ steps.previews.outcome }}"
+          } > "$out/report.txt"
+          cp toolchain.log build.log test.log previews.log "$out/" 2>/dev/null || true
+          cp previews/*.png "$out/" 2>/dev/null || true
+          cd "$out"
+          git init -q
+          git checkout -q -b macos-previews
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "macOS CI report for $GITHUB_SHA"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" macos-previews

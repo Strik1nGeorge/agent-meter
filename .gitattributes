@@ -1,0 +1,2 @@
+# Shell scripts run on macOS and Linux, where a carriage return breaks them.
+*.sh text eol=lf
