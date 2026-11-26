@@ -10,7 +10,7 @@
 
 <p align="center">
   <img alt="Windows 10 / 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square">
-  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1D1D1F?style=flat-square&logo=apple&logoColor=white">
+  <img alt="macOS 13.5+" src="https://img.shields.io/badge/macOS-13.5%2B-1D1D1F?style=flat-square&logo=apple&logoColor=white">
   <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-3C873A?style=flat-square&logo=nodedotjs&logoColor=white">
   <img alt="零 npm 依赖" src="https://img.shields.io/badge/npm%20dependencies-0-34C759?style=flat-square">
   <img alt="MIT 许可" src="https://img.shields.io/badge/license-MIT-6E6E73?style=flat-square">
@@ -44,21 +44,41 @@
 
 ## 快速开始
 
-需要 Windows 10/11 或 macOS 13 及以上、Node.js 22+（Windows 建议 24.5+），以及本机使用过的 Codex 和/或 Claude Code。
+需要：
+- Windows 10/11，或 macOS 13.5 及以上；
+- Node.js 22 或更新版本（Windows 建议 24.5+）：可从 [nodejs.org](https://nodejs.org/) 下载，Windows 上也可用 `winget install OpenJS.NodeJS.LTS`，Mac 上可用 `brew install node`；装好后用 `node --version` 确认；
+- 本机使用过的 Codex 和/或 Claude Code。
+
+**获取代码：** 运行 `git clone https://github.com/Strik1nGeorge/agent-meter.git`，然后 `cd agent-meter`；或在 GitHub 页面点绿色的 *Code* 按钮下载 ZIP 并解压。项目没有任何依赖，不需要 npm 安装。
 
 **完整面板：**
 - Windows：右键 `start.ps1`，选择用 PowerShell 运行；或在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\start.ps1`。用 `stop.ps1` 停止它创建的服务。
 - macOS：在项目目录运行 `./start.sh`，用 `./stop.sh` 停止它创建的服务。
 
-启动器在后台启动服务并打开浏览器。也可以直接运行 `node server.mjs`，打开 http://127.0.0.1:4318，按 Ctrl+C 停止。设置环境变量 `PORT` 可更换端口。
+启动器在后台启动服务并打开浏览器。也可以直接运行 `node server.mjs`，打开 http://127.0.0.1:4318，按 Ctrl+C 停止。更换端口见[设置](#设置)。
 
 **桌面小组件：**
-- Windows：运行 `powershell -ExecutionPolicy Bypass -File desktop/build.ps1` 构建，然后启动 `desktop\bin\AgentHUD.exe`（可以为它创建桌面或任务栏快捷方式）。
+- Windows：运行 `powershell -ExecutionPolicy Bypass -File desktop/build.ps1` 构建，然后启动 `desktop\bin\AgentHUD.exe`。可以为它创建桌面或任务栏快捷方式；把快捷方式放进“启动”文件夹（按 Win+R 输入 `shell:startup`），登录时就会自动启动。
 - macOS：运行 `sh macos/build.sh` 构建（需要 Apple 命令行工具：`xcode-select --install`），然后运行 `open "macos/bin/Agent Meter.app"`。详见 [macOS 桌面小组件](#macos-桌面小组件)。
 
 小组件会自动启动本地服务，无需先运行启动脚本。
 
 面板右上角可切换语言（EN / 中）、切换外观（跟随系统 / 浅色 / 深色），也可打开紧凑窗口（浏览器是否置顶由系统/浏览器决定）。语言在手动选择前跟随浏览器，选择会被保存；本地服务发来的状态文字也会一并翻译。
+
+## 更新、停止与卸载
+
+**更新：** 在项目目录运行 `git pull`；或下载新版本覆盖旧文件，但保留 `.data` 目录（里面有额度历史和小组件位置）。然后：
+- 用 `stop.ps1` 或 `./stop.sh` 停止服务。正在运行的小组件会在几秒内用新版本把它重新拉起；没有运行小组件时，再运行一次启动脚本。
+- 重新构建小组件。Windows：从 ⋯ 菜单退出小组件，运行 `desktop/build.ps1`，再启动它。Mac：运行 `sh macos/build.sh`（它会先退出正在运行的副本），再打开应用。
+
+**全部停止：** 先退出小组件（⋯ 菜单，或托盘/菜单栏图标），因为它发现服务停了就会重新启动服务；再运行 `stop.ps1` 或 `./stop.sh`。
+
+**卸载：**
+1. 按上面的方法全部停止。
+2. 删除你启动小组件的入口：Windows 上的快捷方式，或 Mac 上“系统设置 → 通用 → 登录项”中的条目。
+3. 如果装过 Claude 终端状态栏桥接，运行 `node scripts/connect-claude.mjs --remove`。它会在 `~/.claude` 留下名为 `settings.json.agent-hud-*.bak` 的备份，可以删除。
+4. 在 Mac 上，如果钥匙串弹窗时选过“始终允许”，打开“钥匙串访问”，找到“Claude Safe Storage”，在“访问控制”列表中删掉 `security`。
+5. 删除项目目录。Agent Meter 自己的文件都在目录内的 `.data` 中；macOS 可能另外为应用保留一个很小的偏好设置文件 `~/Library/Preferences/com.agentmeter.widget.plist`。
 
 ## 数据与计数
 
@@ -134,9 +154,9 @@ Mac 版小组件是 `macos/` 目录下的原生应用（Swift，基于 AppKit �
 - **字体与语言：** 文字使用系统字体。语言跟随“系统设置 → 通用 → 语言与地区”中的首选语言，直到你用 EN / 中 按钮或菜单栏图标选择一种。
 - **多个桌面：** 小组件在每个桌面（空间）上都会显示，而不只是打开它的那一个。
 
-`sh macos/build.sh` 构建发布版到 `macos/bin/Agent Meter.app`（会先退出正在运行的副本），并做临时签名（ad hoc）。这个签名只对构建它的那台 Mac 有效，所以请在要使用的 Mac 上构建。应用从自身往上三级目录找到项目，因此请把它留在 `macos/bin`，或用 `--root <项目目录>` 启动。如需登录时自动启动，在“系统设置 → 通用 → 登录项”中添加它。本地服务离线时，它会用 `start.sh` 重启服务（最多每分钟一次）。从“访达”打开的应用只有最基本的 `PATH`，所以 `start.sh` 会先在 Homebrew、MacPorts、Volta 和 nvm 的安装位置查找 Node.js，再询问你的登录 shell（覆盖 fnm、asdf、mise 等）。
+构建需要带 Swift 5.9 或更新版本的 Apple 命令行工具：在 macOS 13.5 及以上运行 `xcode-select --install` 即可安装，不需要完整的 Xcode。`sh macos/build.sh` 构建发布版到 `macos/bin/Agent Meter.app`（会先退出正在运行的副本），并做临时签名（ad hoc）。这个签名只对构建它的那台 Mac 有效，所以请在要使用的 Mac 上构建。应用从自身往上三级目录找到项目，因此请把它留在 `macos/bin`，或用 `--root <项目目录>` 启动。如需登录时自动启动，在“系统设置 → 通用 → 登录项”中添加它。本地服务离线时，它会用 `start.sh` 重启服务（最多每分钟一次）。从“访达”打开的应用只有最基本的 `PATH`，所以 `start.sh` 会先在 Homebrew、MacPorts、Volta 和 nvm 的安装位置查找 Node.js，再询问你的登录 shell（覆盖 fnm、asdf、mise 等）。
 
-**现状：** 每次推送都会在 GitHub 的 macOS 运行器上构建并测试应用：渲染横条、竖排和卡片的浅色/深色、中英文预览，再用鼠标操作真实窗口：停在玻璃上显示提示、悬停圆环弹出卡片、点击圆环切换中间数字、拖到屏幕边缘变成竖排、打开 ⋯ 菜单；还会用“访达”给应用的最小环境打开应用，确认它能自己启动本地服务。它还没有在 Mac 上日常使用过；如果发现外观或行为与 Windows 版不同，欢迎提 issue。
+**现状：** 每次推送都会在 GitHub 的 macOS 运行器上构建并测试应用：渲染横条、竖排和卡片的浅色/深色、中英文预览，再用鼠标操作真实窗口：停在玻璃上显示提示、悬停圆环弹出卡片、点击圆环切换中间数字、拖到屏幕边缘变成竖排、打开 ⋯ 菜单；还会用“访达”给应用的最小环境打开应用，确认它能自己启动本地服务。这些运行器使用最新的 macOS（目前是 26）和 Apple 芯片，并用当前的 Swift 构建。更早的 macOS 版本、Intel Mac 以及用 Swift 5.9 构建都还没有测试过，小组件也还没有在 Mac 上日常使用过；如果发现外观或行为与 Windows 版不同，欢迎提 issue。
 
 ## Claude 账户额度
 
@@ -172,6 +192,32 @@ Windows 上建议使用 Node.js 24.5+；HUD 会同时使用 Node 默认证书和
 已有状态栏时，可在自己的状态栏脚本中把同一份 stdin JSON 传给 `scripts/claude-statusline.mjs`，忽略其 stdout，以保留原显示。
 
 参考：[Claude Code 官方状态栏文档](https://code.claude.com/docs/en/statusline)。
+
+## 设置
+
+Agent Meter 没有配置文件，下面的环境变量用来改变默认值。请在启动服务前设置，例如 Mac 上运行 `PORT=4320 ./start.sh`，或在 PowerShell 中先执行 `$env:PORT = 4320` 再运行 `start.ps1`。
+
+| 变量 | 默认值 | 作用 |
+| --- | --- | --- |
+| `PORT` | `4318` | 服务端口。 |
+| `CODEX_HOME` | `~/.codex` | Codex 目录，会话从其中的 `sessions` 读取。 |
+| `CODEX_BINARY` | 自动查找 | 用来读取官方额度的 Codex 可执行文件。 |
+| `AGENT_HUD_DISABLE_RPC` | 未设置 | 设为 `1` 时只用 Codex 日志里的额度快照。 |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code 目录：会话从其中的 `projects` 读取，终端状态栏桥接修改其中的 `settings.json`。 |
+| `NODE` | 自动查找 | `start.sh` 用来运行服务的 Node.js。 |
+| `AGENT_HUD_DATA_DIR` | 项目内的 `.data` | 主要供测试使用：服务和状态栏脚本保存数据的位置。两者必须设成同一个值；小组件仍使用 `.data`。 |
+
+小组件默认连接 `http://127.0.0.1:4318`。换用其他端口时，启动小组件时带上服务地址，它也会在该端口上启动服务：
+- Windows：`desktop\bin\AgentHUD.exe "<项目目录>" http://127.0.0.1:4320`
+- macOS：`open "macos/bin/Agent Meter.app" --args --url http://127.0.0.1:4320`
+
+## 常见问题
+
+- **服务启动不了：** 启动脚本会把服务的输出写到 `.data/server.log`，错误写到 `.data/server-error.log`。请确认 `node --version` 是 22 或更新版本，并且 4318 端口没被其他程序占用（或设置 `PORT`）。
+- **小组件一直显示离线：** 自己运行一次启动脚本，看服务为什么起不来。新编译的 Windows 小组件首次启动时，可能被杀毒软件扣留数十秒；它自己的日志在 `.data/widget-startup.log` 和 `.data/widget-error.log`。
+- **面板是空的：** 它只统计本机的会话，位于 `~/.codex/sessions` 和 `~/.claude/projects`（见 `CODEX_HOME` 和 `CLAUDE_CONFIG_DIR`）。
+- **没有 Codex 额度：** 服务需要能找到 Codex 可执行文件，且 Codex 已登录；在此之前显示会话里最近一次的额度快照，并标注时间。
+- **没有 Claude 额度：** 按 [Claude 账户额度](#claude-账户额度) 中的两种方式之一接入。
 
 ## 隐私与实现
 

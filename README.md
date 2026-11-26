@@ -10,7 +10,7 @@
 
 <p align="center">
   <img alt="Windows 10 / 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square">
-  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1D1D1F?style=flat-square&logo=apple&logoColor=white">
+  <img alt="macOS 13.5+" src="https://img.shields.io/badge/macOS-13.5%2B-1D1D1F?style=flat-square&logo=apple&logoColor=white">
   <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-3C873A?style=flat-square&logo=nodedotjs&logoColor=white">
   <img alt="Zero npm dependencies" src="https://img.shields.io/badge/npm%20dependencies-0-34C759?style=flat-square">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-6E6E73?style=flat-square">
@@ -44,21 +44,41 @@
 
 ## Quick start
 
-You need Windows 10/11 or macOS 13 or later, Node.js 22+ (24.5+ recommended on Windows), and Codex and/or Claude Code used on this machine.
+You need:
+- Windows 10/11, or macOS 13.5 or later;
+- Node.js 22 or newer (24.5+ recommended on Windows): install it from [nodejs.org](https://nodejs.org/), with `winget install OpenJS.NodeJS.LTS` on Windows or `brew install node` on a Mac, and check it with `node --version`;
+- Codex and/or Claude Code used on this machine.
+
+**Get the code:** run `git clone https://github.com/Strik1nGeorge/agent-meter.git`, then `cd agent-meter`. Or download the ZIP from the green *Code* button on GitHub and unzip it. There's nothing to install with npm, because the project has no dependencies.
 
 **Dashboard:**
 - Windows: right-click `start.ps1` and choose *Run with PowerShell*, or run `powershell -ExecutionPolicy Bypass -File .\start.ps1` in the project folder; `stop.ps1` stops the service it started.
 - macOS: run `./start.sh` in the project folder; `./stop.sh` stops the service it started.
 
-Either one starts the service in the background and opens your browser. You can also run `node server.mjs` directly, open http://127.0.0.1:4318, and press Ctrl+C to stop. Set the `PORT` environment variable to use another port.
+Either one starts the service in the background and opens your browser. You can also run `node server.mjs` directly, open http://127.0.0.1:4318, and press Ctrl+C to stop. To use another port, see [Settings](#settings).
 
 **Desktop widget:**
-- Windows: build it with `powershell -ExecutionPolicy Bypass -File desktop/build.ps1`, then launch `desktop\bin\AgentHUD.exe` (you can pin a shortcut to it on the desktop or taskbar).
+- Windows: build it with `powershell -ExecutionPolicy Bypass -File desktop/build.ps1`, then launch `desktop\bin\AgentHUD.exe`. You can pin a shortcut to it on the desktop or taskbar, and a shortcut in your Startup folder (press Win+R and enter `shell:startup`) starts it when you sign in.
 - macOS: build it with `sh macos/build.sh`, which needs Apple's command line tools (`xcode-select --install`), then run `open "macos/bin/Agent Meter.app"`. See [macOS desktop widget](#macos-desktop-widget).
 
 The widget starts the local service by itself, so you don't need to run the start script first.
 
 The dashboard's top-right corner switches language (EN / 中), switches appearance (system / light / dark) and opens a compact window (whether it stays on top is up to your OS/browser). The language follows your browser until you pick one, and the choice is saved; status text sent by the local service is translated too.
+
+## Updating, stopping and uninstalling
+
+**Updating:** run `git pull` in the project folder, or download the new version and copy it over the old one, keeping the `.data` folder (it holds your quota history and the widget's position). Then:
+- Restart the service with `stop.ps1` or `./stop.sh`. A running widget brings it back on the new version within seconds; otherwise run the start script.
+- Rebuild the widget. On Windows, quit it from its ⋯ menu, run `desktop/build.ps1` and start it again. On a Mac, run `sh macos/build.sh`, which quits the running copy, then open the app again.
+
+**Stopping everything:** quit the widget first, from its ⋯ menu or from the tray or menu-bar icon, because it restarts the service whenever it finds it stopped. Then run `stop.ps1` or `./stop.sh`.
+
+**Uninstalling:**
+1. Stop everything as above.
+2. Remove the widget from wherever you start it: your shortcuts on Windows, or *System Settings → General → Login Items* on a Mac.
+3. If you installed the Claude status-line bridge, run `node scripts/connect-claude.mjs --remove`. It leaves backups named `settings.json.agent-hud-*.bak` in `~/.claude`, which you can delete.
+4. On a Mac, if you answered *Always Allow* to the Keychain question, open Keychain Access, find *Claude Safe Storage* and remove `security` from its *Access Control* list.
+5. Delete the project folder. Agent Meter keeps its own files in the folder's `.data`. macOS may also keep a small preferences file for the app, `~/Library/Preferences/com.agentmeter.widget.plist`.
 
 ## Data and counting
 
@@ -134,9 +154,9 @@ The Mac widget is a native app (Swift, with AppKit and SwiftUI) in `macos/`. It 
 - **Type and language:** text is set in the system font. The language follows the first language in *System Settings → General → Language & Region* until you pick one with the EN / 中 button or from the menu-bar icon.
 - **Spaces:** the widget shows on every desktop (Space), not only the one it was opened on.
 
-`sh macos/build.sh` builds a release copy into `macos/bin/Agent Meter.app`, quitting a running copy first, and signs it ad hoc. That signature is only good for the Mac that built it, so build it on the Mac where you'll use it. The app finds the project three folders above itself, so leave it in `macos/bin`, or start it with `--root <project folder>`. To start it when you log in, add it under *System Settings → General → Login Items*. When the local service is offline it restarts it with `start.sh`, at most once a minute. An app opened from Finder gets only a minimal `PATH`, so `start.sh` looks for Node.js where Homebrew, MacPorts, Volta and nvm put it, then asks your login shell, which covers fnm, asdf, mise and the like.
+Building needs Apple's command line tools with Swift 5.9 or newer, which `xcode-select --install` provides on macOS 13.5 or later; the full Xcode app isn't needed. `sh macos/build.sh` builds a release copy into `macos/bin/Agent Meter.app`, quitting a running copy first, and signs it ad hoc. That signature is only good for the Mac that built it, so build it on the Mac where you'll use it. The app finds the project three folders above itself, so leave it in `macos/bin`, or start it with `--root <project folder>`. To start it when you log in, add it under *System Settings → General → Login Items*. When the local service is offline it restarts it with `start.sh`, at most once a minute. An app opened from Finder gets only a minimal `PATH`, so `start.sh` looks for Node.js where Homebrew, MacPorts, Volta and nvm put it, then asks your login shell, which covers fnm, asdf, mise and the like.
 
-**Status:** every push builds and tests the app on GitHub's macOS runners. The run renders the strip, the column and the cards in both themes and both languages, then drives a real window with the mouse: resting on the glass shows its tooltip, hovering a ring opens the card, clicking a ring switches the middles, dragging to the screen's edge docks it as a column, and the ⋯ menu opens. It also opens the app with the minimal environment Finder gives apps and checks that it starts the local service by itself. It hasn't been used day to day on a Mac yet, so please open an issue if something looks or behaves differently from the Windows widget.
+**Status:** every push builds and tests the app on GitHub's macOS runners. The run renders the strip, the column and the cards in both themes and both languages, then drives a real window with the mouse: resting on the glass shows its tooltip, hovering a ring opens the card, clicking a ring switches the middles, dragging to the screen's edge docks it as a column, and the ⋯ menu opens. It also opens the app with the minimal environment Finder gives apps and checks that it starts the local service by itself. Those runners have the newest macOS (26 at the moment) on Apple silicon and build with the current Swift. Older macOS versions, Intel Macs and builds with Swift 5.9 haven't been tested, and the widget hasn't been used day to day on a Mac yet, so please open an issue if something looks or behaves differently from the Windows widget.
 
 ## Claude account quota
 
@@ -172,6 +192,32 @@ The bridge only writes the session ID, quota windows, context values and collect
 If you already have a status line, pipe the same stdin JSON to `scripts/claude-statusline.mjs` from your own status-line script and ignore its stdout to keep your existing display.
 
 Reference: [Claude Code status line documentation](https://code.claude.com/docs/en/statusline).
+
+## Settings
+
+Agent Meter has no settings file. These environment variables change its defaults; set them before starting the service, for example `PORT=4320 ./start.sh` on a Mac, or `$env:PORT = 4320` in PowerShell before running `start.ps1`.
+
+| Variable | Default | What it changes |
+| --- | --- | --- |
+| `PORT` | `4318` | The service's port. |
+| `CODEX_HOME` | `~/.codex` | Codex's folder; sessions are read from `sessions` inside it. |
+| `CODEX_BINARY` | found automatically | The Codex executable used to read the official quota. |
+| `AGENT_HUD_DISABLE_RPC` | not set | `1` uses only the quota snapshots in Codex's logs. |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's folder: sessions are read from `projects` inside it, and the status-line bridge edits its `settings.json`. |
+| `NODE` | found automatically | The Node.js binary `start.sh` runs the service with. |
+| `AGENT_HUD_DATA_DIR` | `.data` in the project | Mainly for tests: where the service and the status-line script keep their data. Both must see the same value, and the widgets keep using `.data`. |
+
+The widgets look for the service at `http://127.0.0.1:4318`. To use another port, start a widget with the service's address, and it will start the service on that port too:
+- Windows: `desktop\bin\AgentHUD.exe "<project folder>" http://127.0.0.1:4320`
+- macOS: `open "macos/bin/Agent Meter.app" --args --url http://127.0.0.1:4320`
+
+## Troubleshooting
+
+- **The service doesn't start:** the start scripts write its output to `.data/server.log` and its errors to `.data/server-error.log`. Check that `node --version` shows 22 or newer and that nothing else is using port 4318 (or set `PORT`).
+- **The widget stays offline:** run the start script yourself to see why the service doesn't start. The first launch of a freshly built Windows widget can be held by antivirus for tens of seconds; its own logs are `.data/widget-startup.log` and `.data/widget-error.log`.
+- **The dashboard is empty:** it counts only sessions on this machine, in `~/.codex/sessions` and `~/.claude/projects` (see `CODEX_HOME` and `CLAUDE_CONFIG_DIR`).
+- **No Codex quota:** the service needs the Codex executable and a signed-in Codex. Until then it shows the latest snapshot from your sessions, labelled with its time.
+- **No Claude quota:** connect it in one of the two ways under [Claude account quota](#claude-account-quota).
 
 ## Privacy and implementation
 
