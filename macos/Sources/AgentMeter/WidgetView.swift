@@ -137,14 +137,31 @@ struct TipView: View {
     let palette: Palette
 
     var body: some View {
-        Text(text)
-            .font(.system(size: 12))
-            .foregroundColor(palette.text)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 296, alignment: .leading)
-            .padding(EdgeInsets(top: 8, leading: 12, bottom: 9, trailing: 12))
-            .background(RoundedRectangle(cornerRadius: 12).fill(palette.menuBg))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(palette.menuRim, lineWidth: 1))
-            .fixedSize()
+        WrapWidth(limit: 296) {
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(palette.text)
+        }
+        .padding(EdgeInsets(top: 8, leading: 12, bottom: 9, trailing: 12))
+        .background(RoundedRectangle(cornerRadius: 12).fill(palette.menuBg))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(palette.menuRim, lineWidth: 1))
+    }
+}
+
+// Lays text out at its natural width up to a limit and wraps it beyond that, reporting the wrapped height
+// whatever size it's offered, so the panel measured from it fits every line.
+struct WrapWidth: Layout {
+    let limit: CGFloat
+
+    private func width(_ child: LayoutSubview) -> CGFloat { min(child.sizeThatFits(.unspecified).width, limit) }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        return child.sizeThatFits(ProposedViewSize(width: width(child), height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let child = subviews.first else { return }
+        child.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: width(child), height: nil))
     }
 }

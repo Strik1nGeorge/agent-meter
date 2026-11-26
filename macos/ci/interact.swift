@@ -48,6 +48,13 @@ guard let start = widgetBounds() else { print("widget window not found; AgentMet
 print("widget at \(start)")
 capture("real-1-strip.png")
 
+// Rest on empty glass (the gap between the two tiles, x 85–95): the strip's own tip opens after a second,
+// tall enough for every wrapped line.
+post(.mouseMoved, CGPoint(x: start.minX + 90, y: start.midY))
+usleep(1_600_000)
+print("glass tip: \(windows())")
+capture("real-1-tip.png")
+
 // Hover Claude's ring: its card should open under the strip.
 post(.mouseMoved, CGPoint(x: start.minX + 140, y: start.midY))
 usleep(100_000)
@@ -64,8 +71,7 @@ post(.leftMouseUp, ring)
 sleep(1)
 capture("real-3-click.png")
 
-// Drag from empty glass (the gap between the two tiles, x 85–95) to the left edge of the screen: the strip
-// becomes a column there.
+// Drag from empty glass to the left edge of the screen: the strip becomes a column there.
 let grab = CGPoint(x: start.minX + 90, y: start.midY)
 post(.mouseMoved, grab)
 post(.leftMouseDown, grab)

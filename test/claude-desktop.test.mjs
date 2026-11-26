@@ -4,7 +4,7 @@ import { createCipheriv, pbkdf2Sync, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { ClaudeConnectionError, ClaudeDesktopQuota, decryptCache, decryptMacCache, desktopDirectories, macDesktopDirectories, parseDesktopUsage, readMacCredential, selectCredential } from '../lib/claude-desktop.mjs';
+import { ClaudeConnectionError, ClaudeDesktopQuota, decryptCache, decryptMacCache, desktopDirectories, macDesktopDirectories, parseDesktopUsage, readMacCredential, rememberPassword, selectCredential } from '../lib/claude-desktop.mjs';
 
 // Entirely synthetic credentials. These tests never read real accounts or use the network.
 const time = Date.parse('2026-10-15T07:00:00Z');
@@ -136,7 +136,25 @@ test('On a Mac the desktop cache uses Chromium encryption with the Keychain pass
   const credential = await readMacCredential({ directories, password: async () => password });
   assert.equal(credential.token, 'SYNTHETIC_TOKEN');
   assert.equal(credential.account, 'account-a');
-  await assert.rejects(readMacCredential({ directories, password: async () => 'wrong password' }), error => error.code === 'locked');
-  await assert.rejects(readMacCredential({ directories, password: async () => { throw new ClaudeConnectionError('not-found'); } }), error => error.code === 'not-found');
-  await assert.rejects(readMacCredential({ directories: async () => [path.join(root, 'missing')], password: async () => password }), error => error.code === 'not-found');
+  let forgotten = 0;
+  const forget = () => forgotten++;
+  await assert.rejects(readMacCredential({ directories, password: async () => 'wrong password', forget }), error => error.code === 'locked');
+  assert.equal(forgotten, 1);
+  await assert.rejects(readMacCredential({ directories, password: async () => { throw new ClaudeConnectionError('not-found'); }, forget }), error => error.code === 'not-found');
+  await assert.rejects(readMacCredential({ directories: async () => [path.join(root, 'missing')], password: async () => password, forget }), error => error.code === 'not-found');
+  assert.equal(forgotten, 1);
+});
+
+test('On a Mac the Keychain password is read once per run, and read again after failing or being forgotten', async () => {
+  let reads = 0, fail = false;
+  const keychain = rememberPassword(async () => { reads++; if (fail) throw new ClaudeConnectionError('locked'); return `password ${reads}`; });
+  assert.equal(await keychain.get(), 'password 1');
+  assert.equal(await keychain.get(), 'password 1');
+  assert.equal(reads, 1);
+  keychain.forget();
+  fail = true;
+  await assert.rejects(keychain.get(), error => error.code === 'locked');
+  fail = false;
+  assert.equal(await keychain.get(), 'password 3');
+  assert.equal(reads, 3);
 });
