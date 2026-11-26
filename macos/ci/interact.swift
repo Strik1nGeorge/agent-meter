@@ -1,5 +1,5 @@
 // CI only: drives the running widget with synthetic mouse events and screenshots each step, so the macOS job
-// can check hovering, clicking a ring and docking against the screen edge on a real Mac.
+// can check hovering, clicking a ring, docking against the screen edge and the ⋯ menu on a real Mac.
 // Usage: swift macos/ci/interact.swift <output folder> <widget process id>
 import AppKit
 import CoreGraphics
@@ -64,8 +64,9 @@ post(.leftMouseUp, ring)
 sleep(1)
 capture("real-3-click.png")
 
-// Drag from empty glass to the left edge of the screen: the strip becomes a column there.
-let grab = CGPoint(x: start.minX + 182, y: start.midY)
+// Drag from empty glass (the gap between the two tiles, x 85–95) to the left edge of the screen: the strip
+// becomes a column there.
+let grab = CGPoint(x: start.minX + 90, y: start.midY)
 post(.mouseMoved, grab)
 post(.leftMouseDown, grab)
 for step in 1...24 { post(.leftMouseDragged, CGPoint(x: grab.x - (grab.x - 4) * CGFloat(step) / 24, y: grab.y)) }
@@ -73,3 +74,31 @@ post(.leftMouseUp, CGPoint(x: 4, y: grab.y))
 sleep(1)
 print("after drag: \(widgetBounds().map { "\($0)" } ?? "not found") — \(windows())")
 capture("real-4-docked.png")
+
+guard let column = widgetBounds(), column.width < 100 else { print("not docked as a column"); exit(1) }
+
+// In the column, hover Claude's ring (its centre is 148 pt down): the card opens beside the column.
+post(.mouseMoved, CGPoint(x: column.midX, y: column.minY + 140))
+usleep(100_000)
+post(.mouseMoved, CGPoint(x: column.midX, y: column.minY + 148))
+sleep(1)
+print("column hover: \(windows())")
+capture("real-5-column-card.png")
+
+// The ⋯ button at the foot of the column opens the menu.
+let more = CGPoint(x: column.midX, y: column.maxY - 18)
+post(.mouseMoved, more)
+post(.leftMouseDown, more)
+post(.leftMouseUp, more)
+sleep(1)
+print("menu: \(windows())")
+capture("real-6-menu.png")
+for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: down)?.post(tap: .cghidEventTap) }
+usleep(500_000)
+if ownWindows().contains(where: { $0.1 >= 100 }) {
+    // Escape didn't reach the menu: a click elsewhere closes it.
+    let away = CGPoint(x: 500, y: 400)
+    post(.mouseMoved, away); post(.leftMouseDown, away); post(.leftMouseUp, away)
+    usleep(500_000)
+}
+print("after menu: \(windows())")
