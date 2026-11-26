@@ -5,11 +5,12 @@
 <h1 align="center">Agent Meter</h1>
 
 <p align="center">
-  Codex + Claude Code usage and quota at a glance — a local dashboard and a glassy Windows desktop widget.
+  Codex + Claude Code usage and quota at a glance — a local dashboard and a glassy desktop widget for Windows and macOS.
 </p>
 
 <p align="center">
   <img alt="Windows 10 / 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square">
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1D1D1F?style=flat-square&logo=apple&logoColor=white">
   <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-3C873A?style=flat-square&logo=nodedotjs&logoColor=white">
   <img alt="Zero npm dependencies" src="https://img.shields.io/badge/npm%20dependencies-0-34C759?style=flat-square">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-6E6E73?style=flat-square">
@@ -34,20 +35,28 @@
 
 ## Highlights
 
-- 🪟 **Desktop widget** — an acrylic-style glass strip with brand-colored nested rings per platform (5-hour outside, 7-day inside; the middle shows the 5-hour number and reset time, or the 7-day one at a click), a pace tick on each ring, and a pet that works, rests and falls asleep with its agents; hover for details and forecasts, and drop it on a side of the screen for a column.
+- 🪟 **Desktop widget for Windows and macOS** — a glass strip with brand-colored nested rings per platform (5-hour outside, 7-day inside; the middle shows the 5-hour number and reset time, or the 7-day one at a click), a pace tick on each ring, and a pet that works, rests and falls asleep with its agents; hover for details and forecasts, and drop it on a side of the screen for a column.
 - ⏱️ **Pace forecast** — see whether each quota window will last until its reset at your pace so far, or when it would run out, with a burndown chart per window on the dashboard.
 - 📊 **Dashboard** — account quotas, token usage, cache hit rate, a seven-day chart, usage by model, thinking effort or project, and every agent session, in light or dark.
 - 🔒 **Local only** — reads your own Codex / Claude Code logs, binds to 127.0.0.1, never stores prompts or credentials.
 - 📌 **Stays out of the way** — one-click pin, snaps to screen edges, restarts its own service if it stops.
-- 🌐 **English / 中文** — the dashboard follows your browser language and the widget your Windows language; both switch with one click.
+- 🌐 **English / 中文** — the dashboard follows your browser language and the widget your system language; both switch with one click.
 
 ## Quick start
 
-You need Windows 10/11, Node.js 22+ (24.5+ recommended on Windows), and Codex and/or Claude Code used on this machine.
+You need Windows 10/11 or macOS 13 or later, Node.js 22+ (24.5+ recommended on Windows), and Codex and/or Claude Code used on this machine.
 
-**Dashboard:** right-click `start.ps1` and choose *Run with PowerShell*, or run `powershell -ExecutionPolicy Bypass -File .\start.ps1` in the project folder. It starts the service in the background and opens your browser; `stop.ps1` stops the service it started. You can also run `node server.mjs` directly, open http://127.0.0.1:4318, and press Ctrl+C to stop. Set the `PORT` environment variable to use another port.
+**Dashboard:**
+- Windows: right-click `start.ps1` and choose *Run with PowerShell*, or run `powershell -ExecutionPolicy Bypass -File .\start.ps1` in the project folder; `stop.ps1` stops the service it started.
+- macOS: run `./start.sh` in the project folder; `./stop.sh` stops the service it started.
 
-**Desktop widget:** build it with `powershell -ExecutionPolicy Bypass -File desktop/build.ps1`, then launch `desktop\bin\AgentHUD.exe` (you can pin a shortcut to it on the desktop or taskbar). The widget starts the local service by itself, so you don't need to run `start.ps1` first.
+Either one starts the service in the background and opens your browser. You can also run `node server.mjs` directly, open http://127.0.0.1:4318, and press Ctrl+C to stop. Set the `PORT` environment variable to use another port.
+
+**Desktop widget:**
+- Windows: build it with `powershell -ExecutionPolicy Bypass -File desktop/build.ps1`, then launch `desktop\bin\AgentHUD.exe` (you can pin a shortcut to it on the desktop or taskbar).
+- macOS: build it with `sh macos/build.sh`, which needs Apple's command line tools (`xcode-select --install`), then run `open "macos/bin/Agent Meter.app"`. See [macOS desktop widget](#macos-desktop-widget).
+
+The widget starts the local service by itself, so you don't need to run the start script first.
 
 The dashboard's top-right corner switches language (EN / 中), switches appearance (system / light / dark) and opens a compact window (whether it stays on top is up to your OS/browser). The language follows your browser until you pick one, and the choice is saved; status text sent by the local service is translated too.
 
@@ -67,7 +76,7 @@ The dashboard's top-right corner switches language (EN / 中), switches appearan
 
 Refreshed every minute through the official App Server's read-only `account/rateLimits/read`, without making model requests. It reuses Codex's own sign-in; the app never reads, stores or prints login secrets. When the connection fails it shows the real quota snapshot from your latest session, labelled with its source and time. Past the reset time it shows "waiting for update" instead of assuming 100%.
 
-Set `CODEX_BINARY` to point at the Codex executable and `CODEX_HOME` to choose the sessions folder. `AGENT_HUD_DISABLE_RPC=1` uses local snapshots only.
+On a Mac it looks for Codex inside Codex.app or ChatGPT.app (in `/Applications` or `~/Applications`), then in the usual install folders (`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`), then on your `PATH`. Set `CODEX_BINARY` to point at the Codex executable and `CODEX_HOME` to choose the sessions folder. `AGENT_HUD_DISABLE_RPC=1` uses local snapshots only.
 
 Reference: [Codex App Server documentation](https://learn.chatgpt.com/docs/app-server).
 
@@ -117,17 +126,36 @@ The visual design follows [apple-design-skill](https://github.com/naplesblue/app
 
 The desktop app builds with the .NET Framework that ships with Windows, so no extra runtime is needed. The launcher reuses the existing build and doesn't check sources or recompile. After changing the source, quit the widget from its menu, run `powershell -ExecutionPolicy Bypass -File desktop/build.ps1`, then start it again. The content fingerprinting, staging builds and ordered replacement in `desktop/build-support.ps1` remain for development and regression tests. Startup diagnostics go to `.data/widget-startup.log` and errors to `.data/widget-error.log`.
 
+## macOS desktop widget
+
+The Mac widget is a native app (Swift, with AppKit and SwiftUI) in `macos/`. It has everything the Windows widget has, described above: the strip, the nested rings and the click that switches their middles, the pets and their moods, the pace ticks, the hover cards with forecasts, the tooltips, the pin, the language button and the ⋯ menu. It docks as a column against the left or right edge of the screen and remembers its screen, position and layout. The rules behind the rings, cards, forecasts and placement are ported one to one from the Windows widget and tested against the same cases. Where macOS has its own way of doing things, the widget follows it:
+- **Menu bar instead of tray:** a ring icon in the menu bar carries the tray's menu: show or hide the widget, reset its position, open the dashboard or the usage pages, switch language, or quit. The app has no Dock icon and never takes focus from the app you're using.
+- **Glass:** macOS's own blur of whatever is behind the widget, with the same tint, grain, gloss and edges on top. It follows the Mac's light or dark appearance and turns solid with *Reduce transparency* or *Increase contrast*. With *Reduce motion* on, the pets and rings stop animating.
+- **Type and language:** text is set in the system font. The language follows the first language in *System Settings → General → Language & Region* until you pick one with the EN / 中 button or from the menu-bar icon.
+- **Spaces:** the widget shows on every desktop (Space), not only the one it was opened on.
+
+`sh macos/build.sh` builds a release copy into `macos/bin/Agent Meter.app`, quitting a running copy first, and signs it ad hoc. That signature is only good for the Mac that built it, so build it on the Mac where you'll use it. The app finds the project three folders above itself, so leave it in `macos/bin`, or start it with `--root <project folder>`. To start it when you log in, add it under *System Settings → General → Login Items*. When the local service is offline it restarts it with `start.sh`, at most once a minute.
+
+**Status:** every push builds and tests the app on GitHub's macOS runners. The run renders the strip, the column and the cards in both themes and both languages, then drives a real window with the mouse: resting on the glass shows its tooltip, hovering a ring opens the card, clicking a ring switches the middles, dragging to the screen's edge docks it as a column, and the ⋯ menu opens. It hasn't been used day to day on a Mac yet, so please open an issue if something looks or behaves differently from the Windows widget.
+
 ## Claude account quota
 
-### Windows desktop account connection
+### Desktop account connection
 
-The desktop account channel is off by default. It reads the current Windows user's encrypted Claude OAuth cache in memory only, matches the current account and its single organization, and sends a GET to the fixed address `https://api.anthropic.com/api/oauth/usage`. This quota is shared by the desktop app, web and CLI of the same account; it doesn't depend on status-line callbacks and makes no model requests.
+The desktop account channel is off by default. It works on Windows and macOS. It reads the current user's encrypted Claude OAuth cache in memory only, matches the current account and its single organization, and sends a GET to the fixed address `https://api.anthropic.com/api/oauth/usage`. This quota is shared by the desktop app, web and CLI of the same account; it doesn't depend on status-line callbacks and makes no model requests.
 
 Once you explicitly allow the connection, run `node scripts/connect-claude-desktop.mjs --enable` and restart the HUD service. Turn it off with `--disable` on the same command. The switch is stored in this project's `.data/claude-desktop-connection.json`; while it's absent, no credentials are read and no Claude quota is requested.
 
 It normally queries every 5 minutes and waits at least 15 minutes when rate limited. HUD doesn't store access tokens, log raw responses, change Claude's configuration, or refresh or rotate tokens; when the connection expires, open Claude so the app renews it. If the organization can't be determined among several, it stops reading rather than show another account's quota. Offline values are marked as snapshots, and old values are cleared on sign-out or when the account connection becomes invalid.
 
 Works with the standalone and Microsoft Store Claude data folders on Windows, including the `%LOCALAPPDATA%\Claude-Data` folder that newer Claude versions move them to (checked first). It relies on the desktop app's internal interface, not a third-party API the vendor promises to keep stable, so app updates may require adjustments. Verified with a real account on the Microsoft Store desktop app: it returns the 5-hour and 7-day quotas and their reset times.
+
+On a Mac it reads the same cache from `~/Library/Application Support/Claude`. A `Claude-Data` folder there is checked first, in case newer versions move it as they did on Windows. Claude encrypts the cache with a key it keeps in your login Keychain as *Claude Safe Storage*, and the service reads that key with Apple's `security` tool. The first time, macOS asks whether `security` may use it:
+- *Allow* answers for this run. The service keeps the key in memory only, so macOS asks again the next time the service starts.
+- *Always Allow* stops the question, but from then on any program running under your account can read that key through `security` without being asked.
+- *Deny* leaves the connection without a quota.
+
+The Mac path is covered by tests with synthetic data but hasn't been tried with a real Claude install yet.
 
 Node.js 24.5+ is recommended on Windows; HUD uses both Node's default certificates and the Windows trusted certificate store, keeping full HTTPS validation.
 
@@ -160,6 +188,8 @@ Other platforms can be added as adapters in `lib/collector.mjs`, reusing the com
 Windows desktop regression: `powershell -ExecutionPolicy Bypass -File desktop/test.ps1`. It briefly shows separate test windows and uses its own state under `.data/desktop-tests`, without touching your real widget's position or settings. Covers the ring's text, every pet mood, the hover card, docking to a side of the screen and back, always-on-top recovery, pin-click toggling, the ⋯ menu and its placement, the language button, not stealing focus, tray show and exit signals, update and reset-time display, positioning across monitor gaps / negative coordinates / unplugged screens / scaling, correcting real out-of-bounds windows, no rendering while hidden, and no redraw of unchanged rings. Real multi-monitor hot-plugging and dragging between monitors with different DPI still need checking on matching hardware.
 
 Update regression: `powershell -ExecutionPolicy Bypass -File desktop/test-launcher.ps1`, using a temporary project and background test processes. Covers first build, skipping unchanged sources, content checks when timestamps don't change, ordered replacement, and keeping the old process and binary when compilation fails; compatible with Windows PowerShell 5.1.
+
+macOS: `swift test --package-path macos` runs the tests for the widget's shared rules: rings, the 5-hour/7-day switch, weekly blocks, forecasts, pet moods, cards and placement. The CI workflow in `.github/workflows/ci.yml` also runs `npm test` on Windows, macOS and Linux, and on macOS builds the app, renders its previews and drives a real window (see [macOS desktop widget](#macos-desktop-widget)).
 
 ## License
 
