@@ -6,7 +6,7 @@ const flag = process.argv[2];
 if (!['--enable', '--disable'].includes(flag)) {
   console.log('Enable: node scripts/connect-claude-desktop.mjs --enable');
   console.log('Disable: node scripts/connect-claude-desktop.mjs --disable');
-  console.log('Enabling permits read-only use of Claude Desktop encrypted sign-in on this Windows account.');
+  console.log('Enabling permits read-only use of Claude Desktop encrypted sign-in on this user account (Windows, or macOS, which asks for Keychain access the first time).');
   console.log('The access token is sent only to https://api.anthropic.com/api/oauth/usage.');
   console.log('No token is stored by HUD, no refresh is performed, and no model request is sent.');
   process.exit(0);

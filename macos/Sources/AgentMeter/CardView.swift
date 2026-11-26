@@ -48,10 +48,10 @@ struct CardView: View {
             }
             Spacer(minLength: 6)
             // The dot carries the state's colour: green at work, red out of quota, otherwise the text's grey.
-            (Text("● ").foregroundColor(card.mood == .working ? Color(rgb: 0x34c759) : card.mood == .exhausted ? palette.low : palette.textMuted)
-                + Text(card.status).foregroundColor(palette.textMuted))
-                .font(.system(size: 11.5))
-                .lineLimit(1)
+            Circle().fill(card.mood == .working ? Color(rgb: 0x34c759) : card.mood == .exhausted ? palette.low : palette.textMuted)
+                .frame(width: 6, height: 6)
+                .padding(.trailing, 4)
+            Text(card.status).font(.system(size: 11.5)).foregroundColor(palette.textMuted).lineLimit(1)
         }
     }
 

@@ -56,6 +56,14 @@ jobs:
           node scripts/demo-server.mjs . 4400 > demo-server.log 2>&1 &
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:4400/api/quotas > /dev/null && break; sleep 0.5; done
           "macos/bin/Agent Meter.app/Contents/MacOS/AgentMeter" --preview previews --url http://127.0.0.1:4400 2>&1 | tee previews.log
+      - name: Real window
+        id: real
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          mkdir -p real
+          "macos/bin/Agent Meter.app/Contents/MacOS/AgentMeter" --url http://127.0.0.1:4400 --root "$RUNNER_TEMP/am-root" > real/app.log 2>&1 &
+          sleep 6
+          swift macos/ci/interact.swift real 2>&1 | tee real/interact.log
       - name: Publish report
         if: ${{ always() && github.event_name == 'push' }}
         env:
@@ -69,9 +77,10 @@ jobs:
             echo "build: ${{ steps.build.outcome }}"
             echo "test: ${{ steps.test.outcome }}"
             echo "previews: ${{ steps.previews.outcome }}"
+            echo "real: ${{ steps.real.outcome }}"
           } > "$out/report.txt"
           cp toolchain.log build.log test.log previews.log "$out/" 2>/dev/null || true
-          cp previews/*.png "$out/" 2>/dev/null || true
+          cp previews/*.png real/*.png real/*.log "$out/" 2>/dev/null || true
           cd "$out"
           git init -q
           git checkout -q -b macos-previews

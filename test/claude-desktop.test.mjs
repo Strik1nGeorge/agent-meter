@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, pbkdf2Sync, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { ClaudeConnectionError, ClaudeDesktopQuota, decryptCache, desktopDirectories, parseDesktopUsage, selectCredential } from '../lib/claude-desktop.mjs';
+import { ClaudeConnectionError, ClaudeDesktopQuota, decryptCache, decryptMacCache, desktopDirectories, macDesktopDirectories, parseDesktopUsage, readMacCredential, selectCredential } from '../lib/claude-desktop.mjs';
 
 // Entirely synthetic credentials. These tests never read real accounts or use the network.
 const time = Date.parse('2026-10-15T07:00:00Z');
@@ -112,4 +112,31 @@ test('Desktop expired sign-in does not attempt refresh or contact any endpoint',
   const quota = new ClaudeDesktopQuota({ now: () => time, credential: async () => { throw new ClaudeConnectionError('expired'); }, fetchImpl: async () => { calls++; } });
   await quota.refresh();
   assert.equal(calls, 0); assert.equal(quota.status, 'expired'); assert.equal(quota.snapshot, null);
+});
+
+test('On a Mac the desktop cache uses Chromium encryption with the Keychain password, read from Application Support', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-meter-mac-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const password = 'SYNTHETIC_KEYCHAIN_PASSWORD';
+  const encrypt = value => {
+    const cipher = createCipheriv('aes-128-cbc', pbkdf2Sync(password, 'saltysalt', 1003, 16, 'sha1'), Buffer.alloc(16, 0x20));
+    return Buffer.concat([Buffer.from('v10'), cipher.update(JSON.stringify(value)), cipher.final()]).toString('base64');
+  };
+  assert.deepEqual(decryptMacCache(encrypt({ a: 1 }), password), { a: 1 });
+  assert.throws(() => decryptMacCache(encrypt({ a: 1 }), 'wrong password'));
+  assert.throws(() => decryptMacCache(Buffer.from('v11' + 'x'.repeat(32)).toString('base64'), password), error => error.code === 'unsupported');
+
+  await fs.mkdir(path.join(root, 'Claude-Data', 'claude_abc'), { recursive: true });
+  assert.deepEqual(await macDesktopDirectories(root), [path.join(root, 'Claude-Data', 'claude_abc'), path.join(root, 'Claude')]);
+
+  await fs.mkdir(path.join(root, 'Claude'), { recursive: true });
+  const config = { lastKnownAccountUuid: 'account-a', 'oauth:tokenCache': encrypt({ [cacheKey()]: { ...entry, expiresAt: Date.now() + 3600000 } }) };
+  await fs.writeFile(path.join(root, 'Claude', 'config.json'), JSON.stringify(config));
+  const directories = async () => [path.join(root, 'Claude-Data', 'claude_abc'), path.join(root, 'Claude')];
+  const credential = await readMacCredential({ directories, password: async () => password });
+  assert.equal(credential.token, 'SYNTHETIC_TOKEN');
+  assert.equal(credential.account, 'account-a');
+  await assert.rejects(readMacCredential({ directories, password: async () => 'wrong password' }), error => error.code === 'locked');
+  await assert.rejects(readMacCredential({ directories, password: async () => { throw new ClaudeConnectionError('not-found'); } }), error => error.code === 'not-found');
+  await assert.rejects(readMacCredential({ directories: async () => [path.join(root, 'missing')], password: async () => password }), error => error.code === 'not-found');
 });
