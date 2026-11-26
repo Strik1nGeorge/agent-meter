@@ -1,0 +1,84 @@
+Building for debugging...
+[0/12] /Users/runner/work/agent-meter/agent-meter/macos/.build/arm64-apple-macosx/debug/AgentMeterPackageTests.derived/runner.swift
+[1/12] Write sources
+[5/12] Write AgentMeter-entitlement.plist
+[6/12] Write swift-version-7974D3F7F03D5E95.txt
+[8/17] Compiling AgentMeterCore Card.swift
+[9/17] Compiling AgentMeterCore Lang.swift
+[10/17] Emitting module AgentMeterCore
+[11/17] Compiling AgentMeterCore Models.swift
+[12/17] Compiling AgentMeterCore Pace.swift
+[13/19] Compiling AgentMeterCore Placement.swift
+[14/19] Compiling AgentMeterCore Quota.swift
+[15/30] Compiling AgentMeter PetView.swift
+[16/30] Compiling AgentMeter Preview.swift
+[17/30] Compiling AgentMeter RingView.swift
+[18/30] Compiling AgentMeter Theme.swift
+[19/33] Emitting module AgentMeter
+[20/33] Compiling AgentMeter AgentMeterApp.swift
+[21/33] Compiling AgentMeter CardView.swift
+[22/33] Compiling AgentMeter Logos.swift
+[23/33] Compiling AgentMeter Panels.swift
+[24/33] Compiling AgentMeter WidgetController.swift
+[25/33] Compiling AgentMeter WidgetModel.swift
+[26/33] Compiling AgentMeter WidgetView.swift
+[26/33] Write Objects.LinkFileList
+[27/33] Linking AgentMeter
+[28/33] Applying AgentMeter
+[30/33] Compiling AgentMeterCoreTests QuotaTests.swift
+[31/33] Emitting module AgentMeterCoreTests
+[32/35] Emitting module AgentMeterPackageTests
+[33/35] Compiling AgentMeterPackageTests runner.swift
+[33/35] Write Objects.LinkFileList
+[34/35] Linking AgentMeterPackageTests
+Build complete! (33.40s)
+Test Suite 'All tests' started at 2026-11-26 21:44:38.739.
+Test Suite 'AgentMeterPackageTests.xctest' started at 2026-11-26 21:44:38.744.
+Test Suite 'CardTests' started at 2026-11-26 21:44:38.744.
+Test Case '-[AgentMeterCoreTests.CardTests testCardListsWindowsWithRingsForecastsAndUsage]' started.
+Test Case '-[AgentMeterCoreTests.CardTests testCardListsWindowsWithRingsForecastsAndUsage]' passed (0.005 seconds).
+Test Case '-[AgentMeterCoreTests.CardTests testEnglishCard]' started.
+Test Case '-[AgentMeterCoreTests.CardTests testEnglishCard]' passed (0.001 seconds).
+Test Case '-[AgentMeterCoreTests.CardTests testPetMoods]' started.
+Test Case '-[AgentMeterCoreTests.CardTests testPetMoods]' passed (0.000 seconds).
+Test Case '-[AgentMeterCoreTests.CardTests testRunningOutIsWarnedAndSingleRingsAreMarked]' started.
+Test Case '-[AgentMeterCoreTests.CardTests testRunningOutIsWarnedAndSingleRingsAreMarked]' passed (0.001 seconds).
+Test Suite 'CardTests' passed at 2026-11-26 21:44:38.752.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'PaceTests' started at 2026-11-26 21:44:38.752.
+Test Case '-[AgentMeterCoreTests.PaceTests testNoForecastEarlyOrEmptyAndNoPaceWithoutData]' started.
+Test Case '-[AgentMeterCoreTests.PaceTests testNoForecastEarlyOrEmptyAndNoPaceWithoutData]' passed (0.000 seconds).
+Test Case '-[AgentMeterCoreTests.PaceTests testTickAndForecast]' started.
+Test Case '-[AgentMeterCoreTests.PaceTests testTickAndForecast]' passed (0.000 seconds).
+Test Suite 'PaceTests' passed at 2026-11-26 21:44:38.752.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'PlacementTests' started at 2026-11-26 21:44:38.752.
+Test Case '-[AgentMeterCoreTests.PlacementTests testDockingSnappingAndScreens]' started.
+Test Case '-[AgentMeterCoreTests.PlacementTests testDockingSnappingAndScreens]' passed (0.000 seconds).
+Test Case '-[AgentMeterCoreTests.PlacementTests testStateDecodesWithDefaults]' started.
+Test Case '-[AgentMeterCoreTests.PlacementTests testStateDecodesWithDefaults]' passed (0.000 seconds).
+Test Suite 'PlacementTests' passed at 2026-11-26 21:44:38.753.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'QuotaTests' started at 2026-11-26 21:44:38.753.
+Test Case '-[AgentMeterCoreTests.QuotaTests testOuterIsFiveHoursInnerIsWeekMiddleFollowsTheChoice]' started.
+Test Case '-[AgentMeterCoreTests.QuotaTests testOuterIsFiveHoursInnerIsWeekMiddleFollowsTheChoice]' passed (0.001 seconds).
+Test Case '-[AgentMeterCoreTests.QuotaTests testRingBadgesAndTimes]' started.
+Test Case '-[AgentMeterCoreTests.QuotaTests testRingBadgesAndTimes]' passed (0.002 seconds).
+Test Case '-[AgentMeterCoreTests.QuotaTests testServerTextIsTranslated]' started.
+Test Case '-[AgentMeterCoreTests.QuotaTests testServerTextIsTranslated]' passed (0.003 seconds).
+Test Case '-[AgentMeterCoreTests.QuotaTests testSingleWindowPlansModelWindowsAndBuckets]' started.
+Test Case '-[AgentMeterCoreTests.QuotaTests testSingleWindowPlansModelWindowsAndBuckets]' passed (0.000 seconds).
+Test Case '-[AgentMeterCoreTests.QuotaTests testStatusesWithoutAWindowAndExpiredSnapshots]' started.
+Test Case '-[AgentMeterCoreTests.QuotaTests testStatusesWithoutAWindowAndExpiredSnapshots]' passed (0.000 seconds).
+Test Case '-[AgentMeterCoreTests.QuotaTests testTheExhaustedWeekRule]' started.
+Test Case '-[AgentMeterCoreTests.QuotaTests testTheExhaustedWeekRule]' passed (0.000 seconds).
+Test Suite 'QuotaTests' passed at 2026-11-26 21:44:38.761.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
+Test Suite 'AgentMeterPackageTests.xctest' passed at 2026-11-26 21:44:38.761.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.014 (0.017) seconds
+Test Suite 'All tests' passed at 2026-11-26 21:44:38.761.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.014 (0.022) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

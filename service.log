@@ -1,0 +1,7 @@
+SHELL=/bin/bash
+ls: /opt/local/bin/node: No such file or directory
+ls: /usr/local/bin/node: No such file or directory
+lrwxr-xr-x  1 runner  admin  36 Nov 17 04:50 /opt/homebrew/bin/node -> ../Cellar/node@24/24.22.3_1/bin/node
+healthy after 7s: 1
+{"ok":true,"loading":false}
+/opt/homebrew/bin/node /Users/runner/work/agent-meter/agent-meter/server.mjs

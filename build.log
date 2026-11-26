@@ -1,0 +1,9 @@
+Building for production...
+[0/5] Write sources
+[2/5] Write swift-version-7974D3F7F03D5E95.txt
+[4/6] Compiling AgentMeterCore Card.swift
+[5/7] Compiling AgentMeter AgentMeterApp.swift
+[5/7] Write Objects.LinkFileList
+[6/7] Linking AgentMeter
+Build complete! (34.98s)
+Built: /Users/runner/work/agent-meter/agent-meter/macos/bin/Agent Meter.app
