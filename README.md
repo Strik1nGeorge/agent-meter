@@ -49,7 +49,7 @@ You need:
 - Node.js 22 or newer (24.5+ recommended on Windows): install it from [nodejs.org](https://nodejs.org/), with `winget install OpenJS.NodeJS.LTS` on Windows or `brew install node` on a Mac, and check it with `node --version`;
 - Codex and/or Claude Code used on this machine.
 
-**Get the code:** run `git clone https://github.com/Strik1nGeorge/agent-meter.git`, then `cd agent-meter`. Or download the ZIP from the green *Code* button on GitHub and unzip it. There's nothing to install with npm, because the project has no dependencies.
+**Get the code:** run `git clone https://github.com/Strik1nGeorge/agent-meter.git`, then `cd agent-meter`. Or download the ZIP from the green *Code* button on GitHub and unzip it. The Node backend has no npm dependencies.
 
 **Dashboard:**
 - Windows: right-click `start.ps1` and choose *Run with PowerShell*, or run `powershell -ExecutionPolicy Bypass -File .\start.ps1` in the project folder; `stop.ps1` stops the service it started.
@@ -64,6 +64,12 @@ Either one starts the service in the background and opens your browser. You can 
 The widget starts the local service by itself, so you don't need to run the start script first.
 
 The dashboard's top-right corner switches language (EN / 中), switches appearance (system / light / dark) and opens a compact window (whether it stays on top is up to your OS/browser). The language follows your browser until you pick one, and the choice is saved; status text sent by the local service is translated too.
+
+## Rust Backend Preview
+
+Run `cargo build --release --locked --manifest-path rust/Cargo.toml` from the project root. The launchers prefer the built Rust backend; set `AGENT_METER_BACKEND=node` to use the original service, or `AGENT_METER_BACKEND=rust` to require the native binary. The dashboard and widgets are shared. Rust reads the logs without changing them and keeps its own index under `.data/rust/`. The CLI status line is supported; the opt-in Claude desktop account connection still requires Node. See the [Chinese preview notes](README.zh-CN.md#rust-后台试用) for side-by-side setup.
+
+The original `/api/snapshot` still returns per-request usage records. The dashboard explicitly requests `/api/snapshot?view=summary` for daily aggregates. The native backend does not use Claude Desktop login credentials and reports that connection as unsupported.
 
 ## Updating, stopping and uninstalling
 
@@ -161,6 +167,8 @@ Building needs Apple's command line tools with Swift 5.9 or newer, which `xcode-
 ## Claude account quota
 
 ### Desktop account connection
+
+This section describes the legacy Node backend only. The Rust backend does not access Claude Desktop credentials.
 
 The desktop account channel is off by default. It works on Windows and macOS. It reads the current user's encrypted Claude OAuth cache in memory only, matches the current account and its single organization, and sends a GET to the fixed address `https://api.anthropic.com/api/oauth/usage`. This quota is shared by the desktop app, web and CLI of the same account; it doesn't depend on status-line callbacks and makes no model requests.
 

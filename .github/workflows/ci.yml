@@ -28,6 +28,37 @@ jobs:
           node-version: 22
       - run: npm test
 
+  rust:
+    name: Rust backend (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      AGENT_HUD_DISABLE_RPC: '1'
+      AGENT_METER_BACKEND: rust
+      PORT: '44318'
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo +stable build --release --locked --manifest-path rust/Cargo.toml
+      - name: Start and stop the backend
+        if: runner.os != 'Windows'
+        run: |
+          ./start.sh --no-browser
+          trap './stop.sh' EXIT
+          curl -fsS http://127.0.0.1:$PORT/api/health | grep -q '"backend":"rust"'
+      - name: Start and stop the backend on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\start.ps1 -NoBrowser
+          try {
+            $health = Invoke-RestMethod "http://127.0.0.1:$env:PORT/api/health"
+            if (-not $health.ok -or $health.backend -ne 'rust') { throw 'Rust backend not ready' }
+          } finally { .\stop.ps1 }
+
   macos-app:
     name: macOS app
     runs-on: macos-latest
