@@ -4,3 +4,5 @@ node_modules/
 desktop/bin/
 macos/.build/
 macos/bin/
+rust/target/
+rust/bin/

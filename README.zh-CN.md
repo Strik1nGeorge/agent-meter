@@ -49,7 +49,7 @@
 - Node.js 22 或更新版本（Windows 建议 24.5+）：可从 [nodejs.org](https://nodejs.org/) 下载，Windows 上也可用 `winget install OpenJS.NodeJS.LTS`，Mac 上可用 `brew install node`；装好后用 `node --version` 确认；
 - 本机使用过的 Codex 和/或 Claude Code。
 
-**获取代码：** 运行 `git clone https://github.com/Strik1nGeorge/agent-meter.git`，然后 `cd agent-meter`；或在 GitHub 页面点绿色的 *Code* 按钮下载 ZIP 并解压。项目没有任何依赖，不需要 npm 安装。
+**获取代码：** 运行 `git clone https://github.com/Strik1nGeorge/agent-meter.git`，然后 `cd agent-meter`；或在 GitHub 页面点绿色的 *Code* 按钮下载 ZIP 并解压。Node 后台不需要安装 npm 依赖。
 
 **完整面板：**
 - Windows：右键 `start.ps1`，选择用 PowerShell 运行；或在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\start.ps1`。用 `stop.ps1` 停止它创建的服务。
@@ -64,6 +64,21 @@
 小组件会自动启动本地服务，无需先运行启动脚本。
 
 面板右上角可切换语言（EN / 中）、切换外观（跟随系统 / 浅色 / 深色），也可打开紧凑窗口（浏览器是否置顶由系统/浏览器决定）。语言在手动选择前跟随浏览器，选择会被保存；本地服务发来的状态文字也会一并翻译。
+
+## Rust 后台试用
+
+这个分支保留 Node 服务作回退，也可以用 Rust 可执行文件运行完整面板和现有的 macOS / Windows 小组件。两端共用后台源码，分别编译；编译后的服务和 Claude CLI 桥接都不需要 Node.js。
+
+```sh
+cargo build --release --locked --manifest-path rust/Cargo.toml
+PORT=4320 ./start.sh
+```
+
+Windows 下执行同一条 `cargo build`，再运行 `$env:PORT = '4320'; .\start.ps1`。启动脚本优先使用已构建的 Rust 后台；设置 `AGENT_METER_BACKEND=node` 可回退，设置 `AGENT_METER_BACKEND=rust` 则要求 Rust 二进制存在。每个工作目录用一份 PID 文件；想并行对比两版，请用不同工作目录和端口。小组件仍可通过下面的 `--url` / Windows 地址参数指定对应端口。
+
+- Rust 会增量读取 Codex / Claude Code 会话，保留 Codex App Server 额度和会话快照回退。网页按会话、日、模型和思考力度接收汇总；小组件只取额度与活跃度。
+- Rust 的 `.data/rust/` 只缓存统计字段、会话元数据和索引游标，不保存原始消息或登录凭据。可用 `AGENT_HUD_DATA_DIR` 单独指定目录。切换回 Node 不需要迁移数据。
+- Claude CLI 可通过面板的「数据接入」安装 Rust 状态栏；原有自定义状态栏不会被覆盖。要移除，使用同一二进制执行 `claude-disconnect`（若接入时显式指定数据目录，传入同一目录）。Claude 桌面账户的可选钥匙串 / DPAPI 连接暂时只在 Node 后台支持。
 
 ## 更新、停止与卸载
 

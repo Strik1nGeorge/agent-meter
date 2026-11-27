@@ -59,7 +59,7 @@ function burndown(win, shown, pace, name) {
   const label = t('pace.chart', { name, start: shortTime(pace.start), reset: shortTime(win.resetsAt), n: Math.round(current) });
   return `<div class="burndown${pace.state === 'runs-out' ? ' warn' : ''}"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(label)}"><title>${escapeHtml(label)}</title><path class="bd-even" d="M0,${y(100)} L${width},${y(0)}"/>${fill}<path class="bd-lead" d="${lead}"/>${actual ? `<path class="bd-actual" d="${actual}"/>` : ''}${projection}<line class="bd-now" x1="${x(now)}" y1="0" x2="${x(now)}" y2="${height}"/></svg><div class="bd-axis"><span>${shortTime(pace.start)}</span><span>${shortTime(win.resetsAt)}</span></div></div>`;
 }
-function usage(records) { return records.reduce((sum,r) => { for (const k of Object.keys(sum)) sum[k] += r[k] || 0; return sum; }, { input:0, output:0, cached:0, cacheWrite:0, reasoning:0, total:0 }); }
+function usage(records) { return records.reduce((sum,r) => { for (const k of ['input','output','cached','cacheWrite','reasoning','total']) sum[k] += r[k] || 0; sum.requests += r.count ?? 1; return sum; }, { input:0, output:0, cached:0, cacheWrite:0, reasoning:0, total:0, requests:0 }); }
 function selectedSessions() {
   if (!state.data) return [];
   const since = sinceDay();
@@ -197,7 +197,7 @@ function renderBreakdown(sessions) {
     let g = groups.get(key);
     if (!g) groups.set(key, g = { model: r.model || null, value, providers: new Set(), parts: { codex: 0, claude: 0 }, input: 0, output: 0, cached: 0, reasoning: 0, total: 0, requests: 0, sessions: new Set() });
     g.providers.add(s.provider); g.parts[s.provider] += r.total || 0;
-    g.input += r.input || 0; g.output += r.output || 0; g.cached += r.cached || 0; g.reasoning += r.reasoning || 0; g.total += r.total || 0; g.requests++; g.sessions.add(`${s.provider}:${s.id}`);
+    g.input += r.input || 0; g.output += r.output || 0; g.cached += r.cached || 0; g.reasoning += r.reasoning || 0; g.total += r.total || 0; g.requests += r.count ?? 1; g.sessions.add(`${s.provider}:${s.id}`);
   }
   const rows = [...groups.values()].sort((a, b) => b.total - a.total);
   const sum = rows.reduce((n, g) => n + g.total, 0);
@@ -260,7 +260,7 @@ function openDetail(id) {
   if(!s)return;
   state.detailId=id;
   const fields=[[t('detail.input'),s.usage.input],[t('detail.output'),s.usage.output],[t('detail.cached'),s.usage.cached],[t('detail.cacheWrite'),s.usage.cacheWrite],[t('detail.reasoning'),s.usage.reasoning],[t('detail.total'),s.usage.total]];
-  $('#detail-content').innerHTML=`<h2>${escapeHtml(s.name)}</h2><p>${s.provider==='codex'?'Codex':'Claude Code'} · ${escapeHtml(server(s.project))} · ${rangeLabel(state.range)}</p><div class="detail-grid">${fields.map(([label,n])=>`<div class="detail-stat"><label>${label}</label><strong>${exact(n)}</strong></div>`).join('')}</div><div class="detail-meta"><span>${t('detail.id')}</span><code>${escapeHtml(s.id)}</code><span>${t('detail.model')}</span><span>${escapeHtml(s.model||t('time.none'))}</span><span>${t('detail.parent')}</span><code>${escapeHtml(s.parentId||t('detail.parentNone'))}</code><span>${t('detail.last')}</span><span>${fullTime(s.updatedAt)}</span><span>${t('detail.requests')}</span><span>${t('detail.requestCount', { n: s.records.length })}</span></div><p>${t('detail.note')}${s.guardian?(lang==='en'?' ':'')+t('detail.guardianNote'):''}</p>`;
+  $('#detail-content').innerHTML=`<h2>${escapeHtml(s.name)}</h2><p>${s.provider==='codex'?'Codex':'Claude Code'} · ${escapeHtml(server(s.project))} · ${rangeLabel(state.range)}</p><div class="detail-grid">${fields.map(([label,n])=>`<div class="detail-stat"><label>${label}</label><strong>${exact(n)}</strong></div>`).join('')}</div><div class="detail-meta"><span>${t('detail.id')}</span><code>${escapeHtml(s.id)}</code><span>${t('detail.model')}</span><span>${escapeHtml(s.model||t('time.none'))}</span><span>${t('detail.parent')}</span><code>${escapeHtml(s.parentId||t('detail.parentNone'))}</code><span>${t('detail.last')}</span><span>${fullTime(s.updatedAt)}</span><span>${t('detail.requests')}</span><span>${t('detail.requestCount', { n: s.usage.requests })}</span></div><p>${t('detail.note')}${s.guardian?(lang==='en'?' ':'')+t('detail.guardianNote'):''}</p>`;
   if(!$('#detail-dialog').classList.contains('open')) openDialog($('#detail-dialog'));
 }
 // Glass sheets materialize (blur + scale + opacity together) and leave along the same path.
