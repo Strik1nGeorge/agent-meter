@@ -21,8 +21,8 @@ pub struct Window {
     pub remaining_percent: f64,
     pub window_minutes: Option<i64>,
     pub resets_at: Option<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub history: Vec<(i64, f64)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history: Option<Vec<(i64, f64)>>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -58,7 +58,7 @@ impl RawWindow {
             remaining_percent: 100.0 - used,
             window_minutes: self.minutes.or(fallback_minutes),
             resets_at: self.resets.map(|s| (s * 1000.0).round() as i64),
-            history: Vec::new(),
+            history: None,
         })
     }
 }
@@ -570,16 +570,16 @@ impl History {
 
     pub fn attach(&self, provider: &str, limits: &mut Limits) {
         for window in &mut limits.windows {
-            let (Some(reset), Some(minutes)) = (window.resets_at, window.window_minutes) else {
-                continue;
-            };
-            if let Some(series) = self
-                .series
-                .get(&Self::key(provider, window, minutes))
-                .filter(|s| s.resets_at.abs_diff(reset) <= SAME_RESET_MS as u64)
-            {
-                window.history.clone_from(&series.points);
-            }
+            let series =
+                window
+                    .resets_at
+                    .zip(window.window_minutes)
+                    .and_then(|(reset, minutes)| {
+                        self.series
+                            .get(&Self::key(provider, window, minutes))
+                            .filter(|s| s.resets_at.abs_diff(reset) <= SAME_RESET_MS as u64)
+                    });
+            window.history = Some(series.map(|s| s.points.clone()).unwrap_or_default());
         }
     }
 

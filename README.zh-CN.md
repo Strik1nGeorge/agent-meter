@@ -76,9 +76,9 @@ PORT=4320 ./start.sh
 
 Windows 下执行同一条 `cargo build`，再运行 `$env:PORT = '4320'; .\start.ps1`。启动脚本优先使用已构建的 Rust 后台；设置 `AGENT_METER_BACKEND=node` 可回退，设置 `AGENT_METER_BACKEND=rust` 则要求 Rust 二进制存在。每个工作目录用一份 PID 文件；想并行对比两版，请用不同工作目录和端口。小组件仍可通过下面的 `--url` / Windows 地址参数指定对应端口。
 
-- Rust 会增量读取 Codex / Claude Code 会话，保留 Codex App Server 额度和会话快照回退。网页按会话、日、模型和思考力度接收汇总；小组件只取额度与活跃度。
+- Rust 会增量读取 Codex / Claude Code 会话，保留 Codex App Server 额度和会话快照回退。`/api/snapshot` 保留和 Node 一样的逐请求用量记录；网页用 `/api/snapshot?view=summary` 按会话、日、模型和思考力度取汇总，小组件只取额度与活跃度。
 - Rust 的 `.data/rust/` 只缓存统计字段、会话元数据和索引游标，不保存原始消息或登录凭据。可用 `AGENT_HUD_DATA_DIR` 单独指定目录。切换回 Node 不需要迁移数据。
-- Claude CLI 可通过面板的「数据接入」安装 Rust 状态栏；原有自定义状态栏不会被覆盖。要移除，使用同一二进制执行 `claude-disconnect`（若接入时显式指定数据目录，传入同一目录）。Claude 桌面账户的可选钥匙串 / DPAPI 连接暂时只在 Node 后台支持。
+- Claude CLI 可通过面板的「数据接入」安装 Rust 状态栏；原有自定义状态栏不会被覆盖。要移除，使用同一二进制执行 `claude-disconnect`（若接入时显式指定数据目录，传入同一目录）。Rust 不读取 Claude 桌面应用的登录凭据；`desktopConnection.status` 报告 `unsupported`。历史桌面连接实现留在 Node 后台，它使用桌面应用内部接口，不是 [Anthropic 面向第三方支持的认证方式](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use)。
 
 ## 更新、停止与卸载
 
@@ -176,6 +176,8 @@ Mac 版小组件是 `macos/` 目录下的原生应用（Swift，基于 AppKit �
 ## Claude 账户额度
 
 ### 桌面账户连接
+
+本节仅描述旧版 Node 后台。Rust 后台不读取 Claude 桌面应用的登录凭据。
 
 桌面版账户读取通道默认关闭，支持 Windows 与 macOS。它仅在内存中读取当前用户的 Claude 加密 OAuth 缓存，匹配当前账户和唯一组织，并向固定地址 `https://api.anthropic.com/api/oauth/usage` 发送 GET。此额度由同一账户的桌面版、网页版和 CLI 共享，不依赖状态栏回调，也不发起模型请求。
 

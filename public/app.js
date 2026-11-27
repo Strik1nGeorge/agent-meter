@@ -354,7 +354,7 @@ async function refresh() {
   state.loading=true;
   $('#refresh-button').disabled=true;
   try {
-    const response=await fetch('/api/snapshot',{signal:AbortSignal.timeout(10000)});
+    const response=await fetch('/api/snapshot?view=summary',{signal:AbortSignal.timeout(10000)});
     if(!response.ok)throw new Error('http');
     state.data=await response.json();state.online=true;
     renderStatus();

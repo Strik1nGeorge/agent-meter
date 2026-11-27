@@ -14,7 +14,7 @@ use axum::http::{Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing::get};
-use collector::{Activity, Collection, Collector, Provider, ProviderInfo, PublicSession};
+use collector::{Activity, Collection, Collector, Provider, ProviderInfo, SessionView};
 use quota::{History, Limits, Rpc, codex_binary};
 use serde::Serialize;
 use serde_json::json;
@@ -124,7 +124,17 @@ struct ProviderView<'a> {
     limits: Option<Limits>,
     quota_error: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    desktop_connection: Option<DesktopConnection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     activity: Option<&'a Activity>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopConnection {
+    enabled: bool,
+    status: &'static str,
+    next_attempt_at: Option<i64>,
 }
 
 impl Data {
@@ -150,6 +160,13 @@ impl Data {
                     limits,
                     quota_error: (info.id == Provider::Codex && self.quota_error)
                         .then_some("官方额度接口暂不可用，显示最近会话快照"),
+                    desktop_connection: (info.id == Provider::Claude).then_some(
+                        DesktopConnection {
+                            enabled: false,
+                            status: "unsupported",
+                            next_attempt_at: None,
+                        },
+                    ),
                     activity: widget
                         .then(|| self.collection.activity.get(&info.id))
                         .flatten(),
@@ -164,22 +181,37 @@ impl Data {
 struct Snapshot<'a> {
     providers: Vec<ProviderView<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    sessions: Option<&'a [PublicSession]>,
+    sessions: Option<Vec<SessionView<'a>>>,
     collected_at: Option<i64>,
     loading: bool,
     time_zone: &'static str,
-    refresh_seconds: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    refresh_seconds: Option<u64>,
 }
 
-fn snapshot(app: App, widget: bool) -> Response {
+#[derive(PartialEq)]
+enum SnapshotView {
+    Legacy,
+    Summary,
+    Widget,
+}
+
+fn snapshot(app: App, view: SnapshotView) -> Response {
     let data = app.data.read().expect("data lock poisoned");
+    let widget = view == SnapshotView::Widget;
     Json(Snapshot {
         providers: data.providers(widget),
-        sessions: (!widget).then_some(&data.collection.sessions),
+        sessions: (!widget).then(|| {
+            data.collection
+                .sessions
+                .iter()
+                .map(|s| s.view(view == SnapshotView::Summary))
+                .collect()
+        }),
         collected_at: data.collection.collected_at,
         loading: data.collection.collected_at.is_none(),
         time_zone: TIME_ZONE,
-        refresh_seconds: REFRESH.as_secs(),
+        refresh_seconds: (!widget).then_some(REFRESH.as_secs()),
     })
     .into_response()
 }
@@ -340,11 +372,18 @@ async fn serve(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let router = Router::new()
         .route(
             "/api/snapshot",
-            get(|State(app): State<App>| async { snapshot(app, false) }),
+            get(|State(app): State<App>, req: Request| async move {
+                let view = if req.uri().query() == Some("view=summary") {
+                    SnapshotView::Summary
+                } else {
+                    SnapshotView::Legacy
+                };
+                snapshot(app, view)
+            }),
         )
         .route(
             "/api/quotas",
-            get(|State(app): State<App>| async { snapshot(app, true) }),
+            get(|State(app): State<App>| async { snapshot(app, SnapshotView::Widget) }),
         )
         .route("/api/health", get(health))
         .route(

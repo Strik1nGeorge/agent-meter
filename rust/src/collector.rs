@@ -4,10 +4,12 @@ use std::fs::{self, File, Metadata};
 use std::hash::{DefaultHasher, Hasher};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::America::New_York;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, value::RawValue};
 
@@ -133,8 +135,8 @@ struct Session {
     idle: bool,
     entrypoint: Option<String>,
     history_start: Option<i64>,
-    records: BTreeMap<String, Record>,
-    fallback: BTreeMap<String, Record>,
+    records: IndexMap<Arc<str>, Arc<Record>>,
+    fallback: IndexMap<Arc<str>, Arc<Record>>,
     baseline: Usage,
     limits: Option<Limits>,
 }
@@ -295,7 +297,7 @@ impl Session {
                 });
                 let usage = request.usage.unwrap_or_default().counts(Provider::Codex);
                 let record = self.record(time, usage);
-                self.records.insert(id, record);
+                self.records.insert(id.into(), Arc::new(record));
                 self.updated_at = self.updated_at.max(time);
             }
             "event_msg" => {
@@ -341,7 +343,8 @@ impl Session {
                     self.id.as_deref().unwrap_or("null"),
                     ordinal.unwrap_or(time)
                 );
-                self.fallback.insert(key, self.record(time, delta));
+                self.fallback
+                    .insert(key.into(), Arc::new(self.record(time, delta)));
             }
             if let (Some(size), Some(last)) = (
                 info.model_context_window.filter(|s| *s > 0.0),
@@ -467,7 +470,7 @@ impl Session {
                     return;
                 }
                 let mut usage = usage.counts(Provider::Claude);
-                let previous = self.records.get(&id);
+                let previous = self.records.get(id.as_str());
                 if let Some(p) = previous {
                     usage = usage.zip(p.usage, f64::max);
                 }
@@ -480,13 +483,13 @@ impl Session {
                 let effort = effort(level).or_else(|| previous?.effort.clone());
                 let time = previous.map_or(time, |p| if p.time == 0 { time } else { p.time });
                 self.records.insert(
-                    id,
-                    Record {
+                    id.into(),
+                    Arc::new(Record {
                         time,
                         model: message.model,
                         effort,
                         usage,
-                    },
+                    }),
                 );
             }
             _ => {}
@@ -626,6 +629,13 @@ struct Bucket {
 }
 
 #[derive(Serialize)]
+struct RequestRecord {
+    id: Arc<str>,
+    #[serde(flatten)]
+    record: Arc<Record>,
+}
+
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicSession {
     provider: Provider,
@@ -640,7 +650,38 @@ pub struct PublicSession {
     name: String,
     project: String,
     activity: &'static str,
-    records: Vec<Bucket>,
+    #[serde(skip)]
+    summaries: Vec<Bucket>,
+    #[serde(skip)]
+    requests: Vec<RequestRecord>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum RecordView<'a> {
+    Requests(&'a [RequestRecord]),
+    Summary(&'a [Bucket]),
+}
+
+#[derive(Serialize)]
+pub struct SessionView<'a> {
+    #[serde(flatten)]
+    session: &'a PublicSession,
+    records: RecordView<'a>,
+}
+
+impl PublicSession {
+    pub fn view(&self, summary: bool) -> SessionView<'_> {
+        let records = if summary {
+            RecordView::Summary(&self.summaries)
+        } else {
+            RecordView::Requests(&self.requests)
+        };
+        SessionView {
+            session: self,
+            records,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -653,7 +694,7 @@ pub struct Collection {
     pub reused_files: usize,
 }
 
-const INDEX_VERSION: u32 = 1;
+const INDEX_VERSION: u32 = 2;
 
 pub struct Collector {
     files: BTreeMap<PathBuf, CachedFile>,
@@ -904,12 +945,17 @@ impl Collector {
             }
             let first_real = s.records.values().map(|r| r.time).min().unwrap_or(i64::MAX);
             let legacy = s.fallback.iter().filter(|(_, r)| r.time < first_real);
-            // The dashboard works at day/model/effort granularity. Deduplicate before aggregating, not in the browser.
+            // Both API views use the same deduplicated records. Only the dashboard opts into summaries.
             let mut buckets: BTreeMap<_, Bucket> = BTreeMap::new();
+            let mut requests = Vec::new();
             for (id, r) in legacy.chain(s.records.iter()) {
-                if !seen.insert((provider, id.as_str())) {
+                if !seen.insert((provider, id.as_ref())) {
                     continue;
                 }
+                requests.push(RequestRecord {
+                    id: id.clone(),
+                    record: r.clone(),
+                });
                 let date = *days.entry(r.time).or_insert_with(|| day(r.time));
                 let bucket = buckets
                     .entry((date, r.model.as_deref(), r.effort.as_deref()))
@@ -964,7 +1010,8 @@ impl Collector {
                 name,
                 project,
                 activity: if active { "recent" } else { "idle" },
-                records: buckets.into_values().collect(),
+                summaries: buckets.into_values().collect(),
+                requests,
             });
         }
         output.sort_by_key(|s| std::cmp::Reverse(s.updated_at));

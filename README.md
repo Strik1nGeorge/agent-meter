@@ -69,6 +69,8 @@ The dashboard's top-right corner switches language (EN / 中), switches appearan
 
 Run `cargo build --release --locked --manifest-path rust/Cargo.toml` from the project root. The launchers prefer the built Rust backend; set `AGENT_METER_BACKEND=node` to use the original service, or `AGENT_METER_BACKEND=rust` to require the native binary. The dashboard and widgets are shared. Rust reads the logs without changing them and keeps its own index under `.data/rust/`. The CLI status line is supported; the opt-in Claude desktop account connection still requires Node. See the [Chinese preview notes](README.zh-CN.md#rust-后台试用) for side-by-side setup.
 
+The original `/api/snapshot` still returns per-request usage records. The dashboard explicitly requests `/api/snapshot?view=summary` for daily aggregates. The native backend does not use Claude Desktop login credentials and reports that connection as unsupported.
+
 ## Updating, stopping and uninstalling
 
 **Updating:** run `git pull` in the project folder, or download the new version and copy it over the old one, keeping the `.data` folder (it holds your quota history and the widget's position). Then:
@@ -165,6 +167,8 @@ Building needs Apple's command line tools with Swift 5.9 or newer, which `xcode-
 ## Claude account quota
 
 ### Desktop account connection
+
+This section describes the legacy Node backend only. The Rust backend does not access Claude Desktop credentials.
 
 The desktop account channel is off by default. It works on Windows and macOS. It reads the current user's encrypted Claude OAuth cache in memory only, matches the current account and its single organization, and sends a GET to the fixed address `https://api.anthropic.com/api/oauth/usage`. This quota is shared by the desktop app, web and CLI of the same account; it doesn't depend on status-line callbacks and makes no model requests.
 
